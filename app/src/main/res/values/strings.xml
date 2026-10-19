@@ -1,0 +1,6 @@
+<resources>
+    <string name="app_name">MP3Tag Mobile</string>
+    <string name="storage_gate_title">All-files access needed</string>
+    <string name="storage_gate_body">MP3Tag Mobile edits audio tags in place, like MP3Tag on Windows. It needs the Android \"All files access\" permission to browse folders and rewrite your music files.\n\nThis app is for personal use and is not distributed through the Play Store, so the permission is safe to grant.</string>
+    <string name="storage_gate_button">Grant all-files access</string>
+</resources>
