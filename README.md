@@ -13,6 +13,7 @@ Windows, built with Kotlin, Jetpack Compose and **Material 3 Expressive**.
 |---|---|
 | Folder browser with filter, recent folders, storage-device picker, natural sorting | ✅ |
 | Multi-select files, batch tag editing with MP3Tag-style "mixed" field handling | ✅ |
+| Editor file picker: include/exclude files from the edit (MP3Tag-style) | ✅ |
 | Single-file editing (long-press a file) | ✅ |
 | Fields: title, artist, album artist, album, year, track/disc + totals, genre, composer, comment | ✅ |
 | Per-field value pickers (values found in the selected files) | ✅ |

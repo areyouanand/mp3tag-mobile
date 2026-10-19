@@ -52,6 +52,7 @@ data class EditorState(
     val availableKeys: List<FieldKey> = emptyList(),
     val valueOptions: Map<FieldKey, List<String>> = emptyMap(),
     val perFileOverrides: Map<FieldKey, Map<String, String>> = emptyMap(),
+    val excludedPaths: Set<String> = emptySet(),
     val cover: CoverImage? = null,
     val coverMixed: Boolean = false,
     val pendingCover: CoverImage? = null,
@@ -65,6 +66,9 @@ data class EditorState(
 
     val overrideKeys: Set<FieldKey>
         get() = perFileOverrides.keys
+
+    val includedSnapshots: List<TagSnapshot>
+        get() = snapshots.filter { it.path !in excludedPaths }
 
     val hasEdits: Boolean
         get() = fields.values.any { it.edited } || perFileOverrides.isNotEmpty() ||
@@ -94,11 +98,23 @@ class EditorViewModel(
         }
     }
 
-    fun reload() {
+    fun reload(hardReset: Boolean = false) {
         viewModelScope.launch {
             _state.update { it.copy(loading = true) }
             val snapshots = readAll(_state.value.paths)
-            _state.update { it.buildFrom(snapshots, it.extraKeys) }
+            _state.update { current ->
+                var updated = current.buildFrom(snapshots, current.extraKeys)
+                if (hardReset) {
+                    updated = updated.copy(
+                        perFileOverrides = emptyMap(),   // keyed by pre-rename paths — stale
+                        pendingCover = null,
+                        coverRemoveRequested = false,
+                        outcomes = null,
+                        excludedPaths = emptySet(),
+                    )
+                }
+                updated
+            }
         }
     }
 
@@ -133,19 +149,23 @@ class EditorViewModel(
     fun applyRenames(pattern: String, onDone: () -> Unit) {
         val current = _state.value
         if (current.saving || current.loading) return
+        val targets = current.includedSnapshots
+        if (targets.isEmpty()) return
         viewModelScope.launch {
             _state.update { it.copy(saving = true) }
             val outcomes = withContext(Dispatchers.IO) {
-                performRenames(current.snapshots, pattern)
+                performRenames(targets, pattern)
             }
             _state.update {
+                val renamedOldPaths = outcomes.map { it.oldPath }.toSet()
                 it.copy(
                     saving = false,
                     renameOutcomes = outcomes,
-                    paths = outcomes.mapNotNull { o -> o.newPath ?: o.oldPath },
+                    paths = outcomes.map { o -> o.newPath ?: o.oldPath } +
+                        current.snapshots.filter { s -> s.path !in renamedOldPaths }.map { s -> s.path },
                 )
             }
-            reload()
+            reload(hardReset = true)
             onDone()
         }
     }
@@ -219,6 +239,7 @@ class EditorViewModel(
     fun save() {
         val current = _state.value
         if (current.saving || current.loading || !current.hasEdits) return
+        if (current.includedSnapshots.isEmpty()) return
 
         val coverAction = when {
             current.pendingCover != null -> CoverAction.REPLACE
@@ -244,8 +265,9 @@ class EditorViewModel(
 
         viewModelScope.launch {
             _state.update { it.copy(saving = true, outcomes = null) }
+            val targets = current.snapshots.filter { it.path !in current.excludedPaths }
             val outcomes = withContext(Dispatchers.IO) {
-                current.snapshots.map { snapshot ->
+                targets.map { snapshot ->
                     runCatching {
                         TagEngine.write(
                             file = File(snapshot.path),
@@ -265,7 +287,14 @@ class EditorViewModel(
             // Re-read from disk so the editor shows the persisted state.
             val snapshots = readAll(current.snapshots.map { it.path })
             _state.update {
-                it.buildFrom(snapshots, it.extraKeys).copy(saving = false, outcomes = outcomes)
+                it.buildFrom(snapshots, it.extraKeys).copy(
+                    saving = false,
+                    outcomes = outcomes,
+                    // Overrides and cover picks have been written — clear them.
+                    perFileOverrides = emptyMap(),
+                    pendingCover = null,
+                    coverRemoveRequested = false,
+                )
             }
         }
     }
@@ -282,17 +311,21 @@ class EditorViewModel(
      * Builds editor state from fresh snapshots: fields whose values differ across
      * the selection become "mixed" (left untouched unless the user edits them),
      * matching MP3Tag's "<keep>" behaviour. [preserve] keeps in-progress edits
-     * when new field rows are added.
+     * when new field rows are added. Display values (mixed/options/available/covers)
+     * are computed over the INCLUDED files only; pending edits, overrides, cover
+     * picks and dialogs are left untouched.
      */
     private fun EditorState.buildFrom(
         snapshots: List<TagSnapshot>,
         extraKeys: List<FieldKey>,
         preserve: Map<FieldKey, FieldUi> = emptyMap(),
+        excludedPaths: Set<String> = this.excludedPaths,
     ): EditorState {
+        val included = snapshots.filter { it.path !in excludedPaths }
         val displayed = EDITABLE_FIELDS + extraKeys.filter { it !in EDITABLE_FIELDS }
         val fields = displayed.associateWith { key ->
             preserve[key]?.takeIf { it.edited } ?: run {
-                val distinct = snapshots.map { it.fields[key].orEmpty() }.distinct()
+                val distinct = included.map { it.fields[key].orEmpty() }.distinct()
                 if (distinct.size == 1) {
                     FieldUi(mixed = false, original = distinct[0], text = distinct[0], edited = false, cleared = false)
                 } else {
@@ -301,30 +334,48 @@ class EditorViewModel(
             }
         }
         // Fields present in the files but not currently displayed, MP3Tag-style.
-        val available = snapshots.flatMap { it.fields.keys }
+        val available = included.flatMap { it.fields.keys }
             .distinct()
             .filter { it !in displayed }
             .sortedBy { key ->
                 OFFERABLE_FIELDS.indexOf(key).takeIf { index -> index >= 0 }
                     ?: (1_000 + key.ordinal)
             }
-        val covers = snapshots.mapNotNull { it.cover }.distinct()
+        val covers = included.mapNotNull { it.cover }.distinct()
         return copy(
             loading = false,
             snapshots = snapshots,
+            excludedPaths = excludedPaths,
             fields = fields,
             extraKeys = extraKeys.filter { it !in EDITABLE_FIELDS },
             availableKeys = available,
             valueOptions = displayed.associateWith { key ->
-                snapshots.map { it.fields[key].orEmpty() }
+                included.map { it.fields[key].orEmpty() }
                     .filter { it.isNotBlank() }
                     .distinct()
             },
             cover = covers.firstOrNull(),
             coverMixed = covers.size > 1,
-            pendingCover = null,
-            coverRemoveRequested = false,
-            outcomes = null,
+        )
+    }
+
+    /** Includes/excludes a file from the current edit session (MP3Tag-style selection). */
+    fun toggleFileIncluded(path: String) = _state.update { current ->
+        val excluded = current.excludedPaths.toMutableSet()
+        if (!excluded.add(path)) excluded.remove(path)
+        current.buildFrom(current.snapshots, current.extraKeys, preserve = current.fields, excludedPaths = excluded)
+    }
+
+    fun includeAllFiles() = _state.update { current ->
+        current.buildFrom(current.snapshots, current.extraKeys, preserve = current.fields, excludedPaths = emptySet())
+    }
+
+    fun excludeAllFiles() = _state.update { current ->
+        current.buildFrom(
+            current.snapshots,
+            current.extraKeys,
+            preserve = current.fields,
+            excludedPaths = current.snapshots.map { it.path }.toSet(),
         )
     }
 

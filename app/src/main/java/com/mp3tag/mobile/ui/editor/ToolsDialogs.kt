@@ -232,7 +232,7 @@ fun RenameFromTagsDialog(
                         when {
                             badPattern -> PreviewRow(File(snapshot.path).name, "Invalid pattern", "Invalid pattern")
                             newName == null -> PreviewRow(File(snapshot.path).name, "Missing tag values", "Missing tags")
-                            else -> PreviewRow(File(snapshot.path).name, newName)
+                            else -> PreviewRow(File(snapshot.path).name, "→ $newName")
                         }
                     },
                 )

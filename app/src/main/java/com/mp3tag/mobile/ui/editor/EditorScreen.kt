@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -43,6 +44,7 @@ import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -216,15 +218,31 @@ fun EditorScreen(
     val pickCover = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         uri?.let(vm::onCoverPicked)
     }
+    var filesSheetOpen by remember { mutableStateOf(false) }
+
+    val includedSnapshots = state.snapshots.filter { it.path !in state.excludedPaths }
+    val fileSummary = when {
+        state.excludedPaths.isEmpty() -> "${state.paths.size} file(s) • ${formatSummary(includedSnapshots)}"
+        else -> "${includedSnapshots.size} of ${state.paths.size} files • ${formatSummary(includedSnapshots)}"
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
-                    Column {
-                        Text("Edit tags")
+                    Column(
+                        modifier = Modifier.clickable { filesSheetOpen = true },
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Edit tags")
+                            Icon(
+                                Icons.Filled.ArrowDropDown,
+                                contentDescription = "Choose files to edit",
+                                modifier = Modifier.padding(start = 4.dp),
+                            )
+                        }
                         Text(
-                            text = "${state.paths.size} file(s) • ${formatSummary(state.snapshots)}",
+                            text = fileSummary,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
@@ -266,14 +284,6 @@ fun EditorScreen(
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    item {
-                        CoverSection(state, vm) {
-                            pickCover.launch(
-                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                            )
-                        }
-                    }
-
                     item { FileInfoCard(state.snapshots) }
 
                     item { LabeledField(FieldKey.TITLE, state, vm) }
@@ -302,6 +312,14 @@ fun EditorScreen(
                         LabeledField(key, state, vm)
                     }
                     item { AddFieldSection(state, vm) }
+
+                    item {
+                        CoverSection(state, vm) {
+                            pickCover.launch(
+                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                            )
+                        }
+                    }
 
                     item {
                         Button(
@@ -453,8 +471,7 @@ fun EditorScreen(
     }
 
     if (toolsSheetOpen) {
-        ModalBottomSheet(onDismissRequest = { toolsSheetOpen = false }) {
-            Text(
+        ModalBottomSheet(onDismissRequest = { toolsSheetOpen = false }) {            Text(
                 text = "Tools",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.primary,
@@ -485,7 +502,7 @@ fun EditorScreen(
 
     if (showFilenameTags) {
         TagsFromFilenameDialog(
-            snapshots = state.snapshots,
+            snapshots = includedSnapshots,
             onApply = vm::applyParsedTags,
             onDismiss = { showFilenameTags = false },
         )
@@ -493,7 +510,7 @@ fun EditorScreen(
 
     if (showRename) {
         RenameFromTagsDialog(
-            snapshots = state.snapshots,
+            snapshots = includedSnapshots,
             onApply = { pattern, done ->
                 vm.applyRenames(pattern) {
                     onFilesRenamed()
@@ -506,11 +523,51 @@ fun EditorScreen(
 
     if (showBatchActions) {
         BatchActionsDialog(
-            snapshots = state.snapshots,
+            snapshots = includedSnapshots,
             displayedKeys = state.displayedKeys,
             onApply = vm::applyTransforms,
             onDismiss = { showBatchActions = false },
         )
+    }
+
+    if (filesSheetOpen) {
+        ModalBottomSheet(onDismissRequest = { filesSheetOpen = false }) {
+            Column(Modifier.padding(horizontal = 8.dp)) {
+                Text(
+                    text = "Files in this edit",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                )
+                Row(modifier = Modifier.padding(horizontal = 8.dp)) {
+                    TextButton(onClick = vm::includeAllFiles) { Text("Select all") }
+                    TextButton(onClick = vm::excludeAllFiles) { Text("Deselect all") }
+                }
+                Column(
+                    modifier = Modifier
+                        .heightIn(max = 420.dp)
+                        .verticalScroll(rememberScrollState()),
+                ) {
+                    state.snapshots.forEach { snapshot ->
+                        val included = snapshot.path !in state.excludedPaths
+                        ListItem(
+                            headlineContent = {
+                                Text(File(snapshot.path).name, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            },
+                            leadingContent = {
+                                Icon(Icons.Filled.MusicNote, contentDescription = null)
+                            },
+                            trailingContent = {
+                                Checkbox(checked = included, onCheckedChange = null)
+                            },
+                            modifier = Modifier.clickable { vm.toggleFileIncluded(snapshot.path) },
+                        )
+                    }
+                }
+                Spacer(Modifier.navigationBarsPadding())
+                Spacer(Modifier.height(12.dp))
+            }
+        }
     }
 }
 

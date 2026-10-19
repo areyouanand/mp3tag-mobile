@@ -38,6 +38,15 @@ All three write **per-file overrides** layered onto the batch model (`perFileOve
 EditorState; shown as "per-file changes pending — Save to apply"; Save writes each file its own
 values). Also: app remembers last-visited folder on start. CSV export/import not done yet.
 
+**Editor file picker** (MP3Tag-style): the editor header ("Edit tags ▼") opens a sheet listing
+all files in the session with checkboxes — include/exclude files from the current edit, plus
+Select all / Deselect all. Display values (mixed/options/covers) recompute over the included
+files; Save writes included files only. Implemented via `excludedPaths` in EditorState.
+
+**Device UI-testing note**: bottom-sheet rows near the very bottom edge (~y>1950 on 1080x2160)
+sit over the scrim — taps there dismiss the sheet instead of clicking the row. Tap higher rows
+when scripting UI tests.
+
 ## Critical gotchas discovered (do not regress)
 
 - **`DropdownMenu` popups DO NOT RENDER on the iBasso DX270's ROM.** Taps land, no popup window
