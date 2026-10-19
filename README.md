@@ -48,6 +48,19 @@ The debug APK lands at `app\build\outputs\apk\debug\app-debug.apk` — sideload 
 (open it on the device, or `adb install`). Opening the project root in Android Studio works too;
 it will reuse the SDK via `local.properties`.
 
+### CI / install from your phone
+
+Every push to `master` runs a GitHub Action that builds the APK and attaches it to a rolling
+prerelease. On the phone, open:
+
+```
+https://github.com/areyouanand/mp3tag-mobile/releases/latest/download/mp3tag-mobile-debug.apk
+```
+
+(sign in to GitHub, download, then open the APK). All builds — local and CI — sign with the
+committed shared debug keystore, so CI-built APKs install over previously installed versions
+without uninstalling. Versioned releases are created when a `v*` tag is pushed.
+
 ## First launch
 
 1. Grant **All files access** in the system screen the app opens for you.

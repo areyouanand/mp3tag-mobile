@@ -102,6 +102,14 @@ Then parse the XML for `text=`/`content-desc=` + `bounds="..."` nodes; tap thing
 `adb shell input tap <x> <y>` (center of bounds). Also useful: `adb shell "dumpsys window windows | grep 'Window #'"`.
 logcat is flaky to clear on this device (`logcat -c` fails) — use `logcat -d -t 300`.
 
+## CI
+
+`.github/workflows/build.yml` builds on every push to master + `workflow_dispatch`, uploads a
+workflow artifact, and updates a rolling **`latest` prerelease** (asset `mp3tag-mobile-debug.apk`,
+stable URL `releases/latest/download/mp3tag-mobile-debug.apk`). `v*` tag pushes create versioned
+releases. The repo contains `app/debug.keystore` — a shared DEBUG signing config used by both
+local and CI builds so APKs are inter-installable (don't delete it; it's debug-only, not a production secret).
+
 ## Roadmap
 
 - **Phase 2** (next): tags-from-filename patterns (`%artist% - %title%`), rename-from-tags,
