@@ -34,6 +34,8 @@ Phase 2 (in): **Tools menu** in the editor (wrench icon → bottom sheet) with
 - **Tags from filename** (`%artist% - %title%` patterns, live preview, per-file apply)
 - **Rename from tags** (immediate rename with preview, sanitization, collision suffixes "(2)")
 - **Batch actions** (regex replace with `$1` groups, case conversion: UPPER/lower/Title)
+Custom patterns typed in the first two dialogs are auto-saved into the chip list
+(`AppPrefs.savedPatterns`, max 12, built-ins never duplicated) for future sessions.
 All three write **per-file overrides** layered onto the batch model (`perFileOverrides` in
 EditorState; shown as "per-file changes pending — Save to apply"; Save writes each file its own
 values). Also: app remembers last-visited folder on start. CSV export/import not done yet.
