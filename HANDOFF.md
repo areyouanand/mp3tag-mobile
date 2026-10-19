@@ -22,12 +22,21 @@ Single-user app, sideloaded, not for Play Store. Working directory = project roo
    stay untouched unless edited; picking a value from a field's picker FILLS the field only —
    the user commits with Save (applies to all selected files).
 
-## Current state (v0.1.0, verified)
+## Current state (v0.2.0, verified)
 
-Built and running on the target device. Verified: folder browser (natural sort, filter, recents,
-storage-volume chips + "Choose storage…" sheet), multi-select batch editor, per-field value
-pickers (▼ → bottom sheet of values found in files), "Add field" sheet (fields found in files +
-~75 standard fields), cover art replace/remove, ID3v2.3/v2.4 setting, save with per-file results.
+Built and running on the target device. Phase 1 complete: folder browser (natural sort, filter,
+recents, storage-volume chips + "Choose storage…" sheet), multi-select batch editor, per-field
+value pickers (▼ → bottom sheet of values found in files; any mixed field with ≥1 value gets a
+picker), "Add field" sheet (fields found in files + ~75 standard fields), cover art
+replace/remove, ID3v2.3/v2.4 setting, save with per-file results.
+
+Phase 2 (in): **Tools menu** in the editor (wrench icon → bottom sheet) with
+- **Tags from filename** (`%artist% - %title%` patterns, live preview, per-file apply)
+- **Rename from tags** (immediate rename with preview, sanitization, collision suffixes "(2)")
+- **Batch actions** (regex replace with `$1` groups, case conversion: UPPER/lower/Title)
+All three write **per-file overrides** layered onto the batch model (`perFileOverrides` in
+EditorState; shown as "per-file changes pending — Save to apply"; Save writes each file its own
+values). Also: app remembers last-visited folder on start. CSV export/import not done yet.
 
 ## Critical gotchas discovered (do not regress)
 

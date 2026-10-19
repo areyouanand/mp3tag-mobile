@@ -42,10 +42,16 @@ class AppPrefs(context: Context) {
             .putString(KEY_RECENTS, value.take(MAX_RECENTS).joinToString(RECENT_SEPARATOR))
             .apply()
 
+    /** Folder the app was in last, reopened on start. */
+    var lastFolder: String?
+        get() = prefs.getString(KEY_LAST_FOLDER, null)
+        set(value) = prefs.edit().putString(KEY_LAST_FOLDER, value).apply()
+
     companion object {
         private const val KEY_ID3_VERSION = "id3_version"
         private const val KEY_THEME = "theme_mode"
         private const val KEY_RECENTS = "recent_folders"
+        private const val KEY_LAST_FOLDER = "last_folder"
         private const val RECENT_SEPARATOR = "\u0001"
         private const val MAX_RECENTS = 8
     }

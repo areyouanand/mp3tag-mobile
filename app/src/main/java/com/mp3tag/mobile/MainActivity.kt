@@ -149,6 +149,7 @@ fun Mp3tagApp(appViewModel: AppViewModel = viewModel()) {
                         appViewModel.back()
                         browserVm.refresh()
                     },
+                    onFilesRenamed = { browserVm.refresh() },
                 )
 
                 Screen.Settings -> SettingsScreen(

@@ -7,22 +7,27 @@ Windows, built with Kotlin, Jetpack Compose and **Material 3 Expressive**.
 - Uses the **All files access** permission (`MANAGE_EXTERNAL_STORAGE`) so it can browse any folder
   and rewrite files in place — sideload only, not for Play Store distribution.
 
-## Current status — Phase 1
+## Current status — Phase 1 + 2
 
 | Feature | State |
 |---|---|
-| Folder browser with filter, recent folders, natural (numeric-aware) sorting | ✅ |
+| Folder browser with filter, recent folders, storage-device picker, natural sorting | ✅ |
 | Multi-select files, batch tag editing with MP3Tag-style "mixed" field handling | ✅ |
 | Single-file editing (long-press a file) | ✅ |
 | Fields: title, artist, album artist, album, year, track/disc + totals, genre, composer, comment | ✅ |
+| Per-field value pickers (values found in the selected files) | ✅ |
+| Add-field picker (tags present in files + ~75 standard fields) | ✅ |
+| **Tools: tags from filename** (`%artist% - %title%` patterns with preview) | ✅ Phase 2 |
+| **Tools: rename from tags** (preview, sanitized names, collision handling) | ✅ Phase 2 |
+| **Tools: batch actions** (regex replace, case conversion) | ✅ Phase 2 |
 | Cover art: view, embed/replace from photo picker, remove | ✅ |
 | MP3: ID3v2.3 / ID3v2.4 writing (configurable), ID3v1 preserved | ✅ |
-| WAV: RIFF INFO + ID3 chunks (configurable, MP3Tag-style default) | ✅ |
+| WAV: RIFF INFO + ID3 chunks (MP3Tag-style both) | ✅ |
 | DSD: DSF files tagged through their embedded ID3v2 tag | ✅ |
 | FLAC, M4A/MP4, Ogg Vorbis | ✅ |
-| Tags-from-filename, rename-from-tags, batch actions (regex/case), export/import | Phase 2 |
-| DFF (DSDIFF) via TagLib/JNI, Opus/WMA/APE/WavPack | Phase 2/3 |
-| MusicBrainz / Discogs metadata & cover lookup | Phase 2/3 |
+| Tag export/import (CSV) | Phase 2 remaining |
+| DFF (DSDIFF) via TagLib/JNI, Opus/WMA/APE/WavPack | Phase 3 |
+| MusicBrainz / Discogs metadata & cover lookup | Phase 3 |
 
 ## Building
 

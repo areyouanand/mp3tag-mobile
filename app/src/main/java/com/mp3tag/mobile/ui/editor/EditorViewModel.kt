@@ -18,6 +18,7 @@ import com.mp3tag.mobile.data.tag.TagSnapshot
 import com.mp3tag.mobile.data.tag.WriteOptions
 import com.mp3tag.mobile.data.tag.WriteRequest
 import com.mp3tag.mobile.data.tag.sniffImageMime
+import com.mp3tag.mobile.util.PatternParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -39,6 +40,9 @@ data class FieldUi(
 
 data class SaveOutcome(val file: File, val success: Boolean, val message: String?)
 
+/** Result of one rename operation. */
+data class RenameOutcome(val oldPath: String, val newPath: String?, val error: String?)
+
 data class EditorState(
     val paths: List<String> = emptyList(),
     val loading: Boolean = true,
@@ -47,22 +51,28 @@ data class EditorState(
     val extraKeys: List<FieldKey> = emptyList(),
     val availableKeys: List<FieldKey> = emptyList(),
     val valueOptions: Map<FieldKey, List<String>> = emptyMap(),
+    val perFileOverrides: Map<FieldKey, Map<String, String>> = emptyMap(),
     val cover: CoverImage? = null,
     val coverMixed: Boolean = false,
     val pendingCover: CoverImage? = null,
     val coverRemoveRequested: Boolean = false,
     val saving: Boolean = false,
     val outcomes: List<SaveOutcome>? = null,
+    val renameOutcomes: List<RenameOutcome>? = null,
 ) {
     val displayedKeys: List<FieldKey>
         get() = EDITABLE_FIELDS + extraKeys.filter { it !in EDITABLE_FIELDS }
 
+    val overrideKeys: Set<FieldKey>
+        get() = perFileOverrides.keys
+
     val hasEdits: Boolean
-        get() = fields.values.any { it.edited } || pendingCover != null || coverRemoveRequested
+        get() = fields.values.any { it.edited } || perFileOverrides.isNotEmpty() ||
+            pendingCover != null || coverRemoveRequested
 }
 
 class EditorViewModel(
-    private val paths: List<String>,
+    paths: List<String>,
     application: Application,
 ) : AndroidViewModel(application) {
 
@@ -87,8 +97,90 @@ class EditorViewModel(
     fun reload() {
         viewModelScope.launch {
             _state.update { it.copy(loading = true) }
-            val snapshots = readAll(paths)
+            val snapshots = readAll(_state.value.paths)
             _state.update { it.buildFrom(snapshots, it.extraKeys) }
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Phase 2: tags from filename, batch actions, rename from tags
+    // ------------------------------------------------------------------
+
+    /**
+     * Applies tags parsed from file names. Each file gets its own values,
+     * stored as per-file overrides that Save writes to disk.
+     */
+    fun applyParsedTags(entries: List<Pair<String, Map<FieldKey, String>>>) = _state.update { current ->
+        var overrides = current.perFileOverrides
+        for ((path, values) in entries) {
+            values.forEach { (key, value) ->
+                overrides = overrides + (key to ((overrides[key] ?: emptyMap()) + (path to value)))
+            }
+        }
+        current.copy(perFileOverrides = overrides)
+    }
+
+    /** Applies a batch transform (regex/case) result per file. */
+    fun applyTransforms(transforms: List<Triple<String, FieldKey, String>>) = _state.update { current ->
+        var overrides = current.perFileOverrides
+        for ((path, key, value) in transforms) {
+            overrides = overrides + (key to ((overrides[key] ?: emptyMap()) + (path to value)))
+        }
+        current.copy(perFileOverrides = overrides)
+    }
+
+    /** Renames the selected files according to a tag-based pattern. */
+    fun applyRenames(pattern: String, onDone: () -> Unit) {
+        val current = _state.value
+        if (current.saving || current.loading) return
+        viewModelScope.launch {
+            _state.update { it.copy(saving = true) }
+            val outcomes = withContext(Dispatchers.IO) {
+                performRenames(current.snapshots, pattern)
+            }
+            _state.update {
+                it.copy(
+                    saving = false,
+                    renameOutcomes = outcomes,
+                    paths = outcomes.mapNotNull { o -> o.newPath ?: o.oldPath },
+                )
+            }
+            reload()
+            onDone()
+        }
+    }
+
+    fun dismissRenameOutcomes() = _state.update { it.copy(renameOutcomes = null) }
+
+    private fun performRenames(snapshots: List<TagSnapshot>, pattern: String): List<RenameOutcome> {
+        val segments = PatternParser.compile(pattern)
+            ?: return snapshots.map { RenameOutcome(it.path, null, "Invalid pattern") }
+        return snapshots.map { snapshot ->
+            try {
+                val file = File(snapshot.path)
+                val base = PatternParser.buildFileName(segments, snapshot.fields)
+                    ?: return@map RenameOutcome(snapshot.path, null, "Missing tag values for pattern")
+                val sanitized = PatternParser.sanitizeFileName(base)
+                val ext = file.extension.ifBlank { "dat" }
+                val parent = file.parentFile
+                    ?: return@map RenameOutcome(snapshot.path, null, "No parent folder")
+                var candidate = "$sanitized.$ext"
+                var n = 2
+                while (parent.resolve(candidate).exists() &&
+                    parent.resolve(candidate).absolutePath != file.absolutePath
+                ) {
+                    candidate = "$sanitized ($n).$ext"
+                    n += 1
+                }
+                val target = parent.resolve(candidate)
+                if (file.renameTo(target)) {
+                    RenameOutcome(snapshot.path, target.absolutePath, null)
+                } else {
+                    RenameOutcome(snapshot.path, null, "Rename failed")
+                }
+            } catch (e: Exception) {
+                RenameOutcome(snapshot.path, null, e.message ?: "Rename failed")
+            }
         }
     }
 
@@ -128,7 +220,14 @@ class EditorViewModel(
         val current = _state.value
         if (current.saving || current.loading || !current.hasEdits) return
 
-        val fieldValues = buildMap<FieldKey, String?> {
+        val coverAction = when {
+            current.pendingCover != null -> CoverAction.REPLACE
+            current.coverRemoveRequested -> CoverAction.REMOVE
+            else -> CoverAction.NONE
+        }
+        val options = WriteOptions(id3Version = prefs.id3Version)
+
+        fun fieldValuesFor(path: String): Map<FieldKey, String?> = buildMap {
             current.fields.forEach { (key, field) ->
                 when {
                     !field.edited -> Unit
@@ -136,13 +235,12 @@ class EditorViewModel(
                     field.mixed || field.text != field.original -> put(key, field.text.trim())
                 }
             }
+            current.perFileOverrides.forEach { (key, byPath) ->
+                byPath[path]?.let { value ->
+                    put(key, value.trim().takeIf { it.isNotEmpty() })
+                }
+            }
         }
-        val coverAction = when {
-            current.pendingCover != null -> CoverAction.REPLACE
-            current.coverRemoveRequested -> CoverAction.REMOVE
-            else -> CoverAction.NONE
-        }
-        val options = WriteOptions(id3Version = prefs.id3Version)
 
         viewModelScope.launch {
             _state.update { it.copy(saving = true, outcomes = null) }
@@ -152,7 +250,7 @@ class EditorViewModel(
                         TagEngine.write(
                             file = File(snapshot.path),
                             request = WriteRequest(
-                                fieldValues = fieldValues,
+                                fieldValues = fieldValuesFor(snapshot.path),
                                 coverAction = coverAction,
                                 newCover = current.pendingCover,
                             ),
@@ -166,7 +264,9 @@ class EditorViewModel(
             }
             // Re-read from disk so the editor shows the persisted state.
             val snapshots = readAll(current.snapshots.map { it.path })
-            _state.update { it.buildFrom(snapshots, it.extraKeys).copy(saving = false, outcomes = outcomes) }
+            _state.update {
+                it.buildFrom(snapshots, it.extraKeys).copy(saving = false, outcomes = outcomes)
+            }
         }
     }
 

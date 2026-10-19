@@ -28,14 +28,18 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.AutoFixHigh
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DriveFileRenameOutline
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -174,7 +178,7 @@ private val FIELD_LABELS: Map<FieldKey, String> = mapOf(
 )
 
 /** Human label for any FieldKey, with a readable fallback for exotic ones. */
-private fun fieldLabel(key: FieldKey): String =
+internal fun fieldLabel(key: FieldKey): String =
     FIELD_LABELS[key]
         ?: key.name.lowercase()
             .split('_')
@@ -196,6 +200,7 @@ fun EditorScreen(
     paths: List<String>,
     sessionKey: String,
     onDone: () -> Unit,
+    onFilesRenamed: () -> Unit = {},
 ) {
     val app = LocalContext.current.applicationContext as Application
     val vm: EditorViewModel = viewModel(
@@ -203,6 +208,10 @@ fun EditorScreen(
         factory = EditorViewModel.factory(paths, app),
     )
     val state by vm.state.collectAsState()
+    var toolsSheetOpen by remember { mutableStateOf(false) }
+    var showFilenameTags by remember { mutableStateOf(false) }
+    var showRename by remember { mutableStateOf(false) }
+    var showBatchActions by remember { mutableStateOf(false) }
 
     val pickCover = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         uri?.let(vm::onCoverPicked)
@@ -229,6 +238,12 @@ fun EditorScreen(
                     }
                 },
                 actions = {
+                    IconButton(
+                        onClick = { toolsSheetOpen = true },
+                        enabled = !state.saving,
+                    ) {
+                        Icon(Icons.Filled.Build, contentDescription = "Tools")
+                    }
                     IconButton(
                         onClick = vm::save,
                         enabled = state.hasEdits && !state.saving,
@@ -317,8 +332,7 @@ fun EditorScreen(
     }
 
     state.outcomes?.let { outcomes ->
-        AlertDialog(
-            onDismissRequest = vm::dismissOutcomes,
+        AlertDialog(            onDismissRequest = vm::dismissOutcomes,
             title = {
                 val ok = outcomes.count { it.success }
                 Text(
@@ -371,6 +385,131 @@ fun EditorScreen(
             confirmButton = {
                 TextButton(onClick = vm::dismissOutcomes) { Text("OK") }
             },
+        )
+    }
+
+    state.renameOutcomes?.let { outcomes ->
+        val ok = outcomes.count { it.error == null }
+        AlertDialog(
+            onDismissRequest = vm::dismissRenameOutcomes,
+            title = {
+                Text(
+                    if (ok == outcomes.size) "Renamed $ok file(s)"
+                    else "Renamed $ok of ${outcomes.size} files",
+                )
+            },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    outcomes.forEach { outcome ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(vertical = 4.dp),
+                        ) {
+                            Icon(
+                                imageVector = if (outcome.error == null) {
+                                    Icons.Filled.CheckCircle
+                                } else {
+                                    Icons.Filled.ErrorOutline
+                                },
+                                contentDescription = null,
+                                tint = if (outcome.error == null) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.error
+                                },
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    File(outcome.oldPath).name,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                if (outcome.error != null) {
+                                    Text(
+                                        outcome.error,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.error,
+                                    )
+                                } else if (outcome.newPath != null) {
+                                    Text(
+                                        "→ ${File(outcome.newPath).name}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = vm::dismissRenameOutcomes) { Text("OK") }
+            },
+        )
+    }
+
+    if (toolsSheetOpen) {
+        ModalBottomSheet(onDismissRequest = { toolsSheetOpen = false }) {
+            Text(
+                text = "Tools",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+            )
+            listOf(
+                Triple(Icons.Filled.TextFields, "Tags from filename…", 0),
+                Triple(Icons.Filled.DriveFileRenameOutline, "Rename from tags…", 1),
+                Triple(Icons.Filled.AutoFixHigh, "Batch actions…", 2),
+            ).forEach { (icon, label, id) ->
+                ListItem(
+                    headlineContent = { Text(label) },
+                    leadingContent = { Icon(icon, contentDescription = null) },
+                    modifier = Modifier.clickable {
+                        toolsSheetOpen = false
+                        when (id) {
+                            0 -> showFilenameTags = true
+                            1 -> showRename = true
+                            2 -> showBatchActions = true
+                        }
+                    },
+                )
+            }
+            Spacer(Modifier.navigationBarsPadding())
+            Spacer(Modifier.height(12.dp))
+        }
+    }
+
+    if (showFilenameTags) {
+        TagsFromFilenameDialog(
+            snapshots = state.snapshots,
+            onApply = vm::applyParsedTags,
+            onDismiss = { showFilenameTags = false },
+        )
+    }
+
+    if (showRename) {
+        RenameFromTagsDialog(
+            snapshots = state.snapshots,
+            onApply = { pattern, done ->
+                vm.applyRenames(pattern) {
+                    onFilesRenamed()
+                    done()
+                }
+            },
+            onDismiss = { showRename = false },
+        )
+    }
+
+    if (showBatchActions) {
+        BatchActionsDialog(
+            snapshots = state.snapshots,
+            displayedKeys = state.displayedKeys,
+            onApply = vm::applyTransforms,
+            onDismiss = { showBatchActions = false },
         )
     }
 }
@@ -508,8 +647,13 @@ private fun LabeledField(
             if (field.mixed) Text("leave empty to keep existing values")
         },
         supportingText = {
-            if (field.edited && !field.mixed) {
-                Text("was: ${field.original.ifEmpty { "(empty)" }}")
+            Column {
+                if (field.edited && !field.mixed) {
+                    Text("was: ${field.original.ifEmpty { "(empty)" }}")
+                }
+                if (key in state.overrideKeys) {
+                    Text("per-file changes pending — Save to apply")
+                }
             }
         },
         trailingIcon = {

@@ -49,7 +49,8 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
 
     init {
         loadVolumes()
-        open(Environment.getExternalStorageDirectory(), remember = false)
+        val last = prefs.lastFolder?.let(::File)?.takeIf { it.exists() && it.isDirectory }
+        open(last ?: Environment.getExternalStorageDirectory(), remember = false)
     }
 
     fun open(directory: File, remember: Boolean = true) {
@@ -77,6 +78,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                 } else {
                     val (dirs, files) = result.getOrThrow()
                     if (remember) rememberRecent(directory)
+                    prefs.lastFolder = directory.absolutePath
                     current.copy(loading = false, error = null, directories = dirs, audioFiles = files)
                 }
             }
