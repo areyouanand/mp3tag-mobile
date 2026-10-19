@@ -40,8 +40,15 @@ values). Also: app remembers last-visited folder on start. CSV export/import not
 
 **Editor file picker** (MP3Tag-style): the editor header ("Edit tags ▼") opens a sheet listing
 all files in the session with checkboxes — include/exclude files from the current edit, plus
-Select all / Deselect all. Display values (mixed/options/covers) recompute over the included
-files; Save writes included files only. Implemented via `excludedPaths` in EditorState.
+Select all / Deselect all. Implemented via `excludedPaths` in EditorState.
+
+**Editor edit model** (v0.2.1): every field edit is cached **per file at edit time** — only the
+files included when you make the change receive it (`perFileOverrides`), and they stay cached
+until **Save** or **Discard**. Re-including a file later does NOT inherit edits made while it was
+excluded; mixed/value displays recompute over included files with caches layered over disk
+values. Unsaved edits trigger an **exit confirmation** ("Discard & quit / Keep editing") when
+leaving the editor (back arrow or system back). Files excluded before Save keep their cached
+edits after the save.
 
 **Device UI-testing note**: bottom-sheet rows near the very bottom edge (~y>1950 on 1080x2160)
 sit over the scrim — taps there dismiss the sheet instead of clicking the row. Tap higher rows

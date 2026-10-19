@@ -2,6 +2,7 @@ package com.mp3tag.mobile.ui.editor
 
 import android.app.Application
 import android.graphics.Bitmap
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -214,6 +215,12 @@ fun EditorScreen(
     var showFilenameTags by remember { mutableStateOf(false) }
     var showRename by remember { mutableStateOf(false) }
     var showBatchActions by remember { mutableStateOf(false) }
+    var showExitConfirm by remember { mutableStateOf(false) }
+
+    val requestExit: () -> Unit = {
+        if (state.hasEdits) showExitConfirm = true else onDone()
+    }
+    BackHandler { requestExit() }
 
     val pickCover = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         uri?.let(vm::onCoverPicked)
@@ -251,7 +258,7 @@ fun EditorScreen(
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = onDone) {
+                    IconButton(onClick = requestExit) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
@@ -466,6 +473,26 @@ fun EditorScreen(
             },
             confirmButton = {
                 TextButton(onClick = vm::dismissRenameOutcomes) { Text("OK") }
+            },
+        )
+    }
+
+    if (showExitConfirm) {
+        AlertDialog(
+            onDismissRequest = { showExitConfirm = false },
+            title = { Text("Unsaved changes") },
+            text = {
+                Text("You have edits that are not saved yet. Quit without saving?")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showExitConfirm = false
+                    vm.discardChanges()
+                    onDone()
+                }) { Text("Discard & quit") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showExitConfirm = false }) { Text("Keep editing") }
             },
         )
     }

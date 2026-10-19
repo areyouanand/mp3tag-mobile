@@ -71,8 +71,7 @@ data class EditorState(
         get() = snapshots.filter { it.path !in excludedPaths }
 
     val hasEdits: Boolean
-        get() = fields.values.any { it.edited } || perFileOverrides.isNotEmpty() ||
-            pendingCover != null || coverRemoveRequested
+        get() = perFileOverrides.isNotEmpty() || pendingCover != null || coverRemoveRequested
 }
 
 class EditorViewModel(
@@ -94,7 +93,7 @@ class EditorViewModel(
         if (key in current.displayedKeys) {
             current
         } else {
-            current.buildFrom(current.snapshots, current.extraKeys + key, preserve = current.fields)
+            current.buildFrom(current.snapshots, current.extraKeys + key)
         }
     }
 
@@ -133,7 +132,7 @@ class EditorViewModel(
                 overrides = overrides + (key to ((overrides[key] ?: emptyMap()) + (path to value)))
             }
         }
-        current.copy(perFileOverrides = overrides)
+        current.buildFrom(current.snapshots, current.extraKeys, overrides)
     }
 
     /** Applies a batch transform (regex/case) result per file. */
@@ -142,7 +141,7 @@ class EditorViewModel(
         for ((path, key, value) in transforms) {
             overrides = overrides + (key to ((overrides[key] ?: emptyMap()) + (path to value)))
         }
-        current.copy(perFileOverrides = overrides)
+        current.buildFrom(current.snapshots, current.extraKeys, overrides)
     }
 
     /** Renames the selected files according to a tag-based pattern. */
@@ -204,15 +203,33 @@ class EditorViewModel(
         }
     }
 
-    fun onFieldChange(key: FieldKey, value: String) = _state.update {
-        val field = it.fields[key] ?: return@update it
-        it.copy(fields = it.fields + (key to field.copy(text = value, edited = true, cleared = false)))
+    fun onFieldChange(key: FieldKey, value: String) = _state.update { current ->
+        val included = current.includedSnapshots
+        if (included.isEmpty()) return@update current
+        // Cache the edit per file: only the files included NOW receive this change,
+        // and it stays cached until Save or Discard.
+        var overrides = current.perFileOverrides
+        included.forEach { snap ->
+            overrides = overrides + (key to ((overrides[key] ?: emptyMap()) + (snap.path to value)))
+        }
+        current.buildFrom(current.snapshots, current.extraKeys, overrides)
     }
 
-    /** Explicit "clear this field in all selected files" action. */
-    fun onFieldClear(key: FieldKey) = _state.update {
-        val field = it.fields[key] ?: return@update it
-        it.copy(fields = it.fields + (key to field.copy(text = "", edited = true, cleared = true)))
+    /** Explicit "clear this field" for the currently included files. */
+    fun onFieldClear(key: FieldKey) = _state.update { current ->
+        val included = current.includedSnapshots
+        if (included.isEmpty()) return@update current
+        var overrides = current.perFileOverrides
+        included.forEach { snap ->
+            overrides = overrides + (key to ((overrides[key] ?: emptyMap()) + (snap.path to "")))
+        }
+        current.buildFrom(current.snapshots, current.extraKeys, overrides)
+    }
+
+    /** Throws away all cached (unsaved) changes. */
+    fun discardChanges() = _state.update { current ->
+        current.buildFrom(current.snapshots, current.extraKeys, perFileOverrides = emptyMap())
+            .copy(pendingCover = null, coverRemoveRequested = false)
     }
 
     fun onCoverPicked(uri: Uri) {
@@ -249,13 +266,6 @@ class EditorViewModel(
         val options = WriteOptions(id3Version = prefs.id3Version)
 
         fun fieldValuesFor(path: String): Map<FieldKey, String?> = buildMap {
-            current.fields.forEach { (key, field) ->
-                when {
-                    !field.edited -> Unit
-                    field.cleared -> put(key, null)
-                    field.mixed || field.text != field.original -> put(key, field.text.trim())
-                }
-            }
             current.perFileOverrides.forEach { (key, byPath) ->
                 byPath[path]?.let { value ->
                     put(key, value.trim().takeIf { it.isNotEmpty() })
@@ -284,14 +294,17 @@ class EditorViewModel(
                     )
                 }
             }
+            // Written files are done; files not written (excluded) keep their cached edits.
+            val writtenPaths = targets.map { it.path }.toSet()
+            val keptOverrides = current.perFileOverrides
+                .mapValues { (_, byPath) -> byPath.filterKeys { it !in writtenPaths } }
+                .filterValues { it.isNotEmpty() }
             // Re-read from disk so the editor shows the persisted state.
             val snapshots = readAll(current.snapshots.map { it.path })
             _state.update {
-                it.buildFrom(snapshots, it.extraKeys).copy(
+                it.buildFrom(snapshots, it.extraKeys, keptOverrides).copy(
                     saving = false,
                     outcomes = outcomes,
-                    // Overrides and cover picks have been written — clear them.
-                    perFileOverrides = emptyMap(),
                     pendingCover = null,
                     coverRemoveRequested = false,
                 )
@@ -308,30 +321,33 @@ class EditorViewModel(
     }
 
     /**
-     * Builds editor state from fresh snapshots: fields whose values differ across
-     * the selection become "mixed" (left untouched unless the user edits them),
-     * matching MP3Tag's "<keep>" behaviour. [preserve] keeps in-progress edits
-     * when new field rows are added. Display values (mixed/options/available/covers)
-     * are computed over the INCLUDED files only; pending edits, overrides, cover
-     * picks and dialogs are left untouched.
+     * Builds editor state from fresh snapshots. Display values are derived from
+     * the per-file cached edits (overrides) layered over the on-disk tags, and
+     * are computed over the INCLUDED files only. Pending picks and dialogs are
+     * left untouched.
      */
     private fun EditorState.buildFrom(
         snapshots: List<TagSnapshot>,
         extraKeys: List<FieldKey>,
-        preserve: Map<FieldKey, FieldUi> = emptyMap(),
+        perFileOverrides: Map<FieldKey, Map<String, String>> = this.perFileOverrides,
         excludedPaths: Set<String> = this.excludedPaths,
     ): EditorState {
         val included = snapshots.filter { it.path !in excludedPaths }
         val displayed = EDITABLE_FIELDS + extraKeys.filter { it !in EDITABLE_FIELDS }
+        fun effectiveValue(snap: TagSnapshot, key: FieldKey): String =
+            perFileOverrides[key]?.get(snap.path) ?: snap.fields[key].orEmpty()
+
         val fields = displayed.associateWith { key ->
-            preserve[key]?.takeIf { it.edited } ?: run {
-                val distinct = included.map { it.fields[key].orEmpty() }.distinct()
-                if (distinct.size == 1) {
-                    FieldUi(mixed = false, original = distinct[0], text = distinct[0], edited = false, cleared = false)
-                } else {
-                    FieldUi(mixed = true, original = "", text = "", edited = false, cleared = false)
-                }
-            }
+            val effective = included.map { effectiveValue(it, key) }.distinct()
+            val edited = included.any { perFileOverrides[key]?.containsKey(it.path) == true }
+            val original = included.firstOrNull()?.fields?.get(key).orEmpty()
+            FieldUi(
+                mixed = effective.size > 1,
+                original = original,
+                text = if (effective.size == 1) effective[0] else "",
+                edited = edited,
+                cleared = edited && effective.size == 1 && effective[0].isEmpty(),
+            )
         }
         // Fields present in the files but not currently displayed, MP3Tag-style.
         val available = included.flatMap { it.fields.keys }
@@ -347,6 +363,7 @@ class EditorViewModel(
             snapshots = snapshots,
             excludedPaths = excludedPaths,
             fields = fields,
+            perFileOverrides = perFileOverrides,
             extraKeys = extraKeys.filter { it !in EDITABLE_FIELDS },
             availableKeys = available,
             valueOptions = displayed.associateWith { key ->
@@ -363,18 +380,17 @@ class EditorViewModel(
     fun toggleFileIncluded(path: String) = _state.update { current ->
         val excluded = current.excludedPaths.toMutableSet()
         if (!excluded.add(path)) excluded.remove(path)
-        current.buildFrom(current.snapshots, current.extraKeys, preserve = current.fields, excludedPaths = excluded)
+        current.buildFrom(current.snapshots, current.extraKeys, excludedPaths = excluded)
     }
 
     fun includeAllFiles() = _state.update { current ->
-        current.buildFrom(current.snapshots, current.extraKeys, preserve = current.fields, excludedPaths = emptySet())
+        current.buildFrom(current.snapshots, current.extraKeys, excludedPaths = emptySet())
     }
 
     fun excludeAllFiles() = _state.update { current ->
         current.buildFrom(
             current.snapshots,
             current.extraKeys,
-            preserve = current.fields,
             excludedPaths = current.snapshots.map { it.path }.toSet(),
         )
     }
