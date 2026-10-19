@@ -47,12 +47,24 @@ class AppPrefs(context: Context) {
         get() = prefs.getString(KEY_LAST_FOLDER, null)
         set(value) = prefs.edit().putString(KEY_LAST_FOLDER, value).apply()
 
+    /** User-defined patterns saved from the tools dialogs, newest first. */
+    var savedPatterns: List<String>
+        get() = prefs.getString(KEY_SAVED_PATTERNS, null)
+            ?.split(RECENT_SEPARATOR)
+            ?.filter { it.isNotBlank() }
+            ?: emptyList()
+        set(value) = prefs.edit()
+            .putString(KEY_SAVED_PATTERNS, value.take(MAX_SAVED_PATTERNS).joinToString(RECENT_SEPARATOR))
+            .apply()
+
     companion object {
         private const val KEY_ID3_VERSION = "id3_version"
         private const val KEY_THEME = "theme_mode"
         private const val KEY_RECENTS = "recent_folders"
         private const val KEY_LAST_FOLDER = "last_folder"
+        private const val KEY_SAVED_PATTERNS = "saved_patterns"
         private const val RECENT_SEPARATOR = "\u0001"
         private const val MAX_RECENTS = 8
+        private const val MAX_SAVED_PATTERNS = 12
     }
 }

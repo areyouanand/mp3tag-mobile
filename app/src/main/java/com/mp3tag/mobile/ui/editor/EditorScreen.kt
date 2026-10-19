@@ -530,6 +530,8 @@ fun EditorScreen(
     if (showFilenameTags) {
         TagsFromFilenameDialog(
             snapshots = includedSnapshots,
+            savedPatterns = vm.savedPatterns,
+            rememberPattern = vm::savePattern,
             onApply = vm::applyParsedTags,
             onDismiss = { showFilenameTags = false },
         )
@@ -538,6 +540,8 @@ fun EditorScreen(
     if (showRename) {
         RenameFromTagsDialog(
             snapshots = includedSnapshots,
+            savedPatterns = vm.savedPatterns,
+            rememberPattern = vm::savePattern,
             onApply = { pattern, done ->
                 vm.applyRenames(pattern) {
                     onFilesRenamed()

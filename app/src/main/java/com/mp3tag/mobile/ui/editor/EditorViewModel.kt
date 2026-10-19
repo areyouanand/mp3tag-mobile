@@ -84,6 +84,20 @@ class EditorViewModel(
     private val _state = MutableStateFlow(EditorState(paths = paths))
     val state: StateFlow<EditorState> = _state.asStateFlow()
 
+    // ------------------------------------------------------------------
+    // Saved rename/tag patterns (MP3Tag-style pattern library)
+    // ------------------------------------------------------------------
+
+    val savedPatterns: List<String> get() = prefs.savedPatterns
+
+    /** Saves a used pattern for future tools menus; built-ins and duplicates are ignored. */
+    fun savePattern(pattern: String) {
+        val trimmed = pattern.trim()
+        if (trimmed.isBlank()) return
+        if (PatternParser.COMMON_PATTERNS.contains(trimmed)) return
+        prefs.savedPatterns = (listOf(trimmed) + prefs.savedPatterns).distinct().take(12)
+    }
+
     init {
         reload()
     }

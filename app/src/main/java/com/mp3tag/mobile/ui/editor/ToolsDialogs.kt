@@ -96,10 +96,13 @@ private data class PreviewRow(val title: String, val detail: String, val error: 
 @Composable
 fun TagsFromFilenameDialog(
     snapshots: List<TagSnapshot>,
+    savedPatterns: List<String>,
+    rememberPattern: (String) -> Unit,
     onApply: (List<Pair<String, Map<FieldKey, String>>>) -> Unit,
     onDismiss: () -> Unit,
 ) {
     var pattern by remember { mutableStateOf(PatternParser.COMMON_PATTERNS.first()) }
+    val suggestions = PatternParser.COMMON_PATTERNS + savedPatterns
     val parsed = remember(pattern, snapshots) {
         snapshots.map { it to PatternParser.parseFileName(pattern, File(it.path).name) }
     }
@@ -123,7 +126,7 @@ fun TagsFromFilenameDialog(
                         .horizontalScroll(rememberScrollState())
                         .padding(vertical = 6.dp),
                 ) {
-                    PatternParser.COMMON_PATTERNS.forEach { suggestion ->
+                    suggestions.forEach { suggestion ->
                         FilterChip(
                             selected = pattern == suggestion,
                             onClick = { pattern = suggestion },
@@ -156,6 +159,7 @@ fun TagsFromFilenameDialog(
         confirmButton = {
             TextButton(
                 onClick = {
+                    rememberPattern(pattern)
                     onApply(parsed.mapNotNull { (snapshot, values) ->
                         values?.let { snapshot.path to it }
                     })
@@ -177,10 +181,13 @@ fun TagsFromFilenameDialog(
 @Composable
 fun RenameFromTagsDialog(
     snapshots: List<TagSnapshot>,
+    savedPatterns: List<String>,
+    rememberPattern: (String) -> Unit,
     onApply: (pattern: String, onDone: () -> Unit) -> Unit,
     onDismiss: () -> Unit,
 ) {
     var pattern by remember { mutableStateOf("%track% - %title%") }
+    val suggestions = PatternParser.COMMON_PATTERNS + savedPatterns
     val segments = remember(pattern) { PatternParser.compile(pattern) }
     val previews = remember(pattern, snapshots) {
         snapshots.map { snapshot ->
@@ -213,7 +220,7 @@ fun RenameFromTagsDialog(
                         .horizontalScroll(rememberScrollState())
                         .padding(vertical = 6.dp),
                 ) {
-                    PatternParser.COMMON_PATTERNS.forEach { suggestion ->
+                    suggestions.forEach { suggestion ->
                         FilterChip(
                             selected = pattern == suggestion,
                             onClick = { pattern = suggestion },
@@ -241,6 +248,7 @@ fun RenameFromTagsDialog(
         confirmButton = {
             TextButton(
                 onClick = {
+                    rememberPattern(pattern)
                     val done = { onDismiss() }
                     onApply(pattern, done)
                 },
