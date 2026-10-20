@@ -6,7 +6,20 @@ import java.io.File
 /** Folder listing filtered to what a tag editor cares about. */
 object FolderScanner {
 
-    val AUDIO_EXTENSIONS = setOf("mp3", "flac", "m4a", "mp4", "ogg", "oga", "wav", "dsf")
+    val AUDIO_EXTENSIONS = setOf(
+        "mp3",
+        "flac",
+        "m4a", "mp4", "m4b",
+        "ogg", "oga",
+        "opus",
+        "wav",
+        "aif", "aiff", "aifc",
+        "wma", "asf",
+        "ape",
+        "wv",
+        "dsf",
+        "dff",
+    )
 
     fun isAudioFile(file: File): Boolean =
         file.extension.lowercase() in AUDIO_EXTENSIONS && file.isFile

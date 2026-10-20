@@ -3,14 +3,20 @@ package com.mp3tag.mobile.data.tag
 import com.mp3tag.mobile.data.prefs.Id3Version
 import org.jaudiotagger.tag.FieldKey
 
-/** Audio formats supported in phase 1. */
+/** Supported audio formats across Phase 1–3. */
 enum class AudioFormat(val extension: String) {
     MP3("mp3"),
     FLAC("flac"),
     M4A("m4a"),
     OGG("ogg"),
+    OPUS("opus"),
     WAV("wav"),
+    AIFF("aiff"),
+    WMA("wma"),
+    APE("ape"),
+    WAVPACK("wv"),
     DSF("dsf"),
+    DFF("dff"),
     OTHER(""),
 }
 

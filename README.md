@@ -3,15 +3,16 @@
 A personal-use Android audio tag editor and file manager that mirrors the workflow of [MP3Tag](https://www.mp3tag.de) for
 Windows, built with Kotlin, Jetpack Compose, and **Material 3 Expressive**.
 
-- Current release: **v0.3.3** (`versionCode = 7`)
+- Current release: **v0.4.0** (`versionCode = 8`)
 - Minimum Android version: **12 (API 31)**
 - Uses the **All files access** permission (`MANAGE_EXTERNAL_STORAGE`) so it can browse any folder
   and rewrite files in place — sideload only, not for Play Store distribution.
 
-## Current status — v0.3.3
+## Current status — v0.4.0
 
 | Feature | State |
 |---|---|
+| **Extended audio formats (Phase 3): Opus (`.opus`), DFF / DSDIFF (`.dff`), Monkey's Audio (`.ape`), WavPack (`.wv`), WMA/ASF (`.wma`/`.asf`), AIFF (`.aif`/`.aiff`/`.aifc`), M4B (`.m4b`)** | ✅ v0.4.0 |
 | **Theme section: Screen mode (`Auto`, `Dark`, `Light`) + Design language (`Material 3 Expressive`, `Material You`, `Liquid Glass`, `Halo`)** | ✅ v0.3.2 |
 | **Home workspace in Grid style (`Tag editor`, `File manager`, `Automate`, `Settings`)** | ✅ v0.3.1 |
 | **Full File Manager (copy, move/cut, paste, rename, delete, new folder, sort, hidden files, properties, open in Tag Editor)** | ✅ v0.3.0 |
@@ -33,10 +34,9 @@ Windows, built with Kotlin, Jetpack Compose, and **Material 3 Expressive**.
 | **Versioned APK builds (`mp3tag-mobile-v<versionName>-debug.apk`) & matching GitHub Releases** | ✅ v0.3.1 |
 | MP3: ID3v2.3 / ID3v2.4 writing (configurable), ID3v1 preserved | ✅ |
 | WAV: RIFF INFO + ID3 chunks (MP3Tag-style both) | ✅ |
-| DSD: DSF files tagged through their embedded ID3v2 tag | ✅ |
-| FLAC, M4A/MP4, Ogg Vorbis | ✅ |
-| DFF (DSDIFF) via TagLib/JNI, Opus/WMA/APE/WavPack | Phase 3 |
-| MusicBrainz / Discogs metadata & cover lookup | Phase 3 |
+| DSD: DSF & DFF (DSDIFF) files tagged through their embedded ID3v2 tag | ✅ v0.4.0 |
+| FLAC, M4A/MP4/M4B, Ogg Vorbis, Opus, AIFF, WMA/ASF, APE (Monkey's Audio), WavPack (`.wv`) | ✅ v0.4.0 |
+| MusicBrainz / Discogs metadata & cover lookup | Phase 3 remaining |
 
 ## Building
 
@@ -64,7 +64,7 @@ Pushing to `master` runs a GitHub Action that builds the versioned APK (`mp3tag-
 and publishes/updates the corresponding versioned GitHub Release (`v<versionName>`, marked as **Latest**):
 
 - Latest release page: `https://github.com/areyouanand/mp3tag-mobile/releases/latest`
-- Current release (`v0.3.3`): `https://github.com/areyouanand/mp3tag-mobile/releases/tag/v0.3.3`
+- Current release (`v0.4.0`): `https://github.com/areyouanand/mp3tag-mobile/releases/tag/v0.4.0`
 
 All builds — local and CI — sign with the committed shared debug keystore, so CI-built APKs install
 over previously installed versions without uninstalling.
@@ -88,7 +88,10 @@ app/src/main/java/com/mp3tag/mobile/
 │   ├── prefs/AppPrefs.kt            # ID3 version, theme, performance mode, recents, saved patterns
 │   └── tag/
 │       ├── TagData.kt               # models, O(1) hashed CoverImage, editable field catalog
-│       └── TagEngine.kt             # JAudioTagger read/write engine
+│       ├── TagEngine.kt             # unified read/write dispatcher across all audio formats
+│       ├── DffTagHandler.kt         # DSDIFF (.dff) FRM8/PROP parser & ID3v2 chunk reader/writer
+│       ├── OpusTagHandler.kt        # Ogg Opus (.opus) OpusHead/OpusTags VorbisComment + page CRC writer
+│       └── ApeTagHandler.kt         # APEv2 (APETAGEX) reader/writer for Monkey's Audio (.ape) & WavPack (.wv)
 ├── ui/
 │   ├── home/HomeScreen.kt           # Grid Home dashboard (Tag editor, File manager, Automate, Settings)
 │   ├── browser/                     # Tag editor folder & file browser, file/folder multi-select
@@ -106,5 +109,5 @@ app/src/main/java/com/mp3tag/mobile/
     └── PatternParser.kt             # %field% pattern parser and filename builder
 ```
 
-Tag engine: [JAudioTagger 3.0.1](https://www.jthink.net/jaudiotagger/) (pure Java). DFF support will
-use [TagLib 2.x](https://taglib.org/) through JNI.
+Tag engine: [JAudioTagger 3.0.1](https://www.jthink.net/jaudiotagger/) + custom binary handlers for
+DSDIFF (`.dff`), Ogg Opus (`.opus`), Monkey's Audio (`.ape`), and WavPack (`.wv`).

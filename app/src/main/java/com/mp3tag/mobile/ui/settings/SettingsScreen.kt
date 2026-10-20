@@ -204,7 +204,7 @@ private fun TagSettingsBlock(
     id3Version: Id3Version,
     onId3VersionChange: (Id3Version) -> Unit,
 ) {
-    SectionHeader("MP3 & DSD (DSF) tag version")
+    SectionHeader("MP3 & DSD (DSF / DFF) tag version")
     Column {
         Id3Version.entries.forEach { version ->
             RadioRow(
@@ -215,16 +215,16 @@ private fun TagSettingsBlock(
         }
     }
     Text(
-        text = "Applies when saving MP3 and DSF (DSD) files.",
+        text = "Applies when saving MP3, DSF, and DFF (DSDIFF) files.",
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(start = 4.dp, top = 4.dp),
     )
 
-    SectionHeader("WAV tags")
+    SectionHeader("WAV & AIFF tags")
     Text(
-        text = "WAV files are written with both an ID3v2 chunk and a RIFF INFO chunk, " +
-            "like MP3Tag's default.",
+        text = "WAV files are written with both an ID3v2 chunk and a RIFF INFO chunk (like MP3Tag's default). " +
+            "AIFF files are written with an embedded ID3v2 chunk.",
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(start = 4.dp, top = 4.dp),
@@ -260,17 +260,17 @@ private fun AboutSettingsBlock() {
     SectionHeader("About")
     Card(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Column(Modifier.padding(16.dp)) {
-            Text("MP3Tag Mobile 0.3.3", style = MaterialTheme.typography.titleMedium)
+            Text("MP3Tag Mobile 0.4.0", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(8.dp))
             Text(
                 text = "Personal-use tag editor & file manager inspired by MP3Tag for Windows.\n\n" +
                     "Supported now: Home workspace grid, Tag Editor for MP3 (ID3v1/v2.3/v2.4), FLAC, " +
-                    "M4A/MP4, Ogg, WAV (RIFF INFO + ID3), DSF (DSD), tags from filename, rename from tags, " +
-                    "batch regex & case transforms, full File Manager (copy, move, rename, delete, new folder, " +
-                    "sort, properties), multi-design-language Theme system (Material 3 Expressive, Material You, " +
+                    "M4A/MP4/M4B, Ogg Vorbis, Opus, WAV (RIFF INFO + ID3), AIFF/AIF/AIFC, WMA/ASF, " +
+                    "APE (Monkey's Audio), WavPack (.wv), DSF & DFF (DSD / DSDIFF), tags from filename, " +
+                    "rename from tags, batch regex & case transforms, full File Manager, " +
+                    "multi-design-language Theme system (Material 3 Expressive, Material You, " +
                     "Liquid Glass, Halo), and adaptive phone/tablet layouts.\n\n" +
-                    "Roadmap: Automate workflows, DFF (DSDIFF) via TagLib, " +
-                    "Opus/WMA/APE, MusicBrainz & Discogs lookup.",
+                    "Roadmap: Automate workflows, MusicBrainz & Discogs lookup.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

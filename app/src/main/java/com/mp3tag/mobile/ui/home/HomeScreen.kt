@@ -76,7 +76,7 @@ fun HomeScreen(
             id = "tag_editor",
             title = "Tag editor",
             subtitle = "Browse music folders, batch edit tags, cover art, rename & regex tools",
-            badge = "MP3 • FLAC • M4A • OGG • WAV • DSF",
+            badge = "MP3 • FLAC • M4A • OGG • OPUS • WAV • AIFF • WMA • APE • WV • DSF • DFF",
             icon = Icons.Filled.MusicNote,
             containerColor = scheme.primaryContainer,
             contentColor = scheme.onPrimaryContainer,

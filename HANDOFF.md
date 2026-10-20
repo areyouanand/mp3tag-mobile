@@ -11,22 +11,33 @@ Single user, sideloaded, never going to the Play Store.
 
 - Kotlin + Jetpack Compose, **Material 3 Expressive** UI (dynamic Material You color)
 - minSdk 31 (Android 12), target/compile SDK 36, AGP 8.13.2, Kotlin 2.4.21, Gradle 8.14.4 (wrapper)
-- Tag engine: **JAudioTagger 3.0.1** (pure Java): MP3 (ID3v1 preserved; v2.3/v2.4 selectable),
-  FLAC, M4A/MP4, Ogg Vorbis, **WAV (ID3 + RIFF INFO chunks)**, **DSF (DSD, embedded ID3v2)**
-- versionName 0.3.3 / versionCode 7 (v0.1.0 phase 1, v0.2.1 phase 2, v0.2.2 adaptive UI + hardware scaling, v0.3.0 Home grid + File Manager + Automate, v0.3.1 folder selection + versioned APK/releases, v0.3.2 Theme Screen mode & Design language selector, v0.3.3 roadmap cleanup)
+- Tag engine: **JAudioTagger 3.0.1** + custom binary format handlers (`DffTagHandler`, `OpusTagHandler`, `ApeTagHandler`):
+  - **MP3** (ID3v1 preserved; ID3v2.3 / ID3v2.4 selectable)
+  - **FLAC**, **Ogg Vorbis** (`.ogg`/`.oga`), **Opus** (`.opus`, RFC 7845 `OpusHead` + `OpusTags`)
+  - **M4A / MP4 / M4B** (MP4 atoms)
+  - **WAV** (ID3v2 + RIFF INFO chunks), **AIFF / AIF / AIFC** (embedded ID3v2)
+  - **WMA / ASF** (`.wma`/`.asf`)
+  - **APE** (Monkey's Audio `.ape`) & **WavPack** (`.wv`) via APEv2 (`APETAGEX`)
+  - **DSF** (DSD) & **DFF** (DSDIFF `.dff`, embedded `"ID3 "` chunk in `"FRM8"`, ID3v2.3 / ID3v2.4 selectable)
+- versionName 0.4.0 / versionCode 8 (v0.1.0 phase 1, v0.2.1 phase 2, v0.2.2 adaptive UI + hardware scaling, v0.3.0 Home grid + File Manager + Automate, v0.3.1 folder selection + versioned APK/releases, v0.3.2 Theme Screen mode & Design language selector, v0.3.3 roadmap cleanup, v0.4.0 Phase 3 extended audio formats)
 
 ## Locked-in product decisions (do not silently change)
 
 1. **All Files Access** (`MANAGE_EXTERNAL_STORAGE`) — browse/edit any folder like MP3Tag; sideload only.
-2. **DSF works; DFF does not yet** — DSF (DSD Stream File) is handled by JAudioTagger.
-   DFF (DSDIFF) is Phase 3, via TagLib 2.x through NDK/JNI.
-3. **Local tagging only, for now** — MusicBrainz/Discogs lookup is Phase 3, not sooner (user chose this).
+2. **Both DSF and DFF (DSDIFF) are supported** — DSF via JAudioTagger and DFF via `DffTagHandler` (`"ID3 "` chunk inside `"FRM8"`), both respecting the ID3v2.3 / ID3v2.4 setting.
+3. **Local tagging only, for now** — MusicBrainz/Discogs lookup is the next Phase 3 step when the user asks for it.
 4. All pickers/menus are **ModalBottomSheets** — NOT DropdownMenu (broken on the device; see gotchas).
 5. Editing follows MP3Tag semantics, implemented as a **per-file cached-edit model** (see below).
 6. **Home Workspace Grid is the app entry point** — launches into 4 grid tiles (`Tag editor`, `File manager`, `Automate`, `Settings`). Only the grid tile for `Settings` is shown on the Home page (no duplicate top-bar gear icon).
 7. **Every change goes under a new release number (`versionName` / `versionCode`)** — bump `versionName` and `versionCode` in `app/build.gradle.kts` (and the version string in `SettingsScreen.kt`), tag `v<versionName>`, and let the GitHub Release + APK filename (`mp3tag-mobile-v<versionName>-debug.apk`) reflect that version.
 
-## Current state (v0.3.3 — everything below is verified working on the device)
+## Current state (v0.4.0 — everything below is verified working on the device)
+
+**Phase 3 Extended Audio Formats** (`data/tag/TagEngine.kt`, `DffTagHandler.kt`, `OpusTagHandler.kt`, `ApeTagHandler.kt`):
+- **DFF / DSDIFF (`.dff`)**: `DffTagHandler` parses the big-endian `FRM8` / `DSD ` / `PROP` (`FS  `, `CHNL`) / `DSD ` audio chunks for sample rate, channels, duration, and bitrate, and reads/writes an embedded `"ID3 "` chunk (respecting the user's ID3v2.3 / ID3v2.4 setting) including cover art.
+- **Ogg Opus (`.opus`)**: `OpusTagHandler` parses `OpusHead` (input sample rate, pre-skip) + final Ogg page granule position (`48,000 Hz` granule rate) for exact duration, and reads/writes `OpusTags` (VorbisComment + `METADATA_BLOCK_PICTURE` cover art), re-lacing Ogg pages and recomputing page sequence numbers + `OggCRCFactory` checksums when tag size changes.
+- **Monkey's Audio (`.ape`) & WavPack (`.wv`)**: `ApeTagHandler` parses `MAC ` and `wvpk` headers for sample rate/duration/bitrate and reads/writes **APEv2 (`APETAGEX`)** tags at the end of the file (preserving any trailing 128-byte ID3v1 tag), including `Cover Art (front)` binary artwork and `Track`/`Disc` `n/total` splitting.
+- **WMA / ASF (`.wma`, `.asf`)**, **AIFF (`.aif`, `.aiff`, `.aifc`)**, and **M4B (`.m4b`)**: wired through JAudioTagger (`AsfTag`, `AiffTag`, `Mp4Tag`) with ID3v2 version conversion fixed for both MP3 and DSF.
 
 **Theme: Screen Mode & Design Language** (`ui/theme/Theme.kt`, `ui/settings/SettingsScreen.kt`, `data/prefs/AppPrefs.kt`):
 - Settings → **Theme** section includes two subsections:
@@ -169,7 +180,7 @@ mixed-cover detection. Section sits at the bottom of the editor (user requested)
   - `MainActivity.kt` — activity, AppViewModel (nav: `Home` / `Browser` (Tag editor) / `FileManager` / `Automate` / `Settings(returnTo)` / `Editor(paths, session, returnTo)`, permission, theme, performance mode)
   - `data/fs/FolderScanner.kt` — natural sorting, directory listing, recursive audio file collection (`collectAudioFilesRecursively`)
   - `data/prefs/AppPrefs.kt` — settings, recent folders, last folders (`lastFolder` + `lastFileManagerFolder`), `showHiddenFiles`, saved patterns
-  - `data/tag/TagData.kt` + `TagEngine.kt` — models + JAudioTagger engine
+  - `data/tag/TagData.kt`, `TagEngine.kt`, `DffTagHandler.kt`, `OpusTagHandler.kt`, `ApeTagHandler.kt` — models, JAudioTagger engine, and custom DFF/Opus/APEv2 binary handlers
   - `ui/home/` (`HomeScreen`), `ui/filemanager/` (`FileManagerScreen`, `FileManagerViewModel`),
     `ui/automate/` (`AutomateScreen`), `ui/browser/`, `ui/editor/` (`EditorScreen`, `EditorViewModel`,
     `ToolsDialogs`), `ui/settings/`, `ui/common/` (`Common.kt`, `AdaptiveLayout.kt`),
@@ -179,11 +190,9 @@ mixed-cover detection. Section sits at the bottom of the editor (user requested)
 
 ## Roadmap
 
+- **Phase 3 remaining**: MusicBrainz + Cover Art Archive + Discogs online metadata and cover lookup.
 - **Automate workspace**: user requested the `Automate` section on the Home grid as a placeholder to be populated with automated tagging/file workflows in a future session.
-- **Free-form custom fields**: possibly support custom tag keys (`TXXX` / Vorbis freeform / MP4 `----:` atoms) beyond the standard ~75-field catalog.
-- **Phase 3**: DFF (DSDIFF) via TagLib 2.x JNI (TagLib 2.0+ supports DSDIFF; latest 2.3.2;
-  "Fix building with Android NDK 29" in 2.2 → NDK-supported), Opus, WMA/ASF, APE, WavPack;
-  MusicBrainz + Cover Art Archive + Discogs (user still wants local-first until they say otherwise).
+- **Free-form custom fields**: possibly support custom tag keys (`TXXX` / Vorbis freeform / MP4 `----:` atoms / APEv2 custom items) beyond the standard ~75-field catalog.
 - Larger libraries: WorkManager for background batch saves, paging for file list.
 - Persist unsaved edit cache across process death (currently lost on app kill) — user was told;
   may come up.
