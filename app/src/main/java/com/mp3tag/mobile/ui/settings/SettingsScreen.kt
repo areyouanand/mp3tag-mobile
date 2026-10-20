@@ -260,7 +260,7 @@ private fun AboutSettingsBlock() {
     SectionHeader("About")
     Card(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Column(Modifier.padding(16.dp)) {
-            Text("MP3Tag Mobile 0.4.0", style = MaterialTheme.typography.titleMedium)
+            Text("MP3Tag Mobile 0.4.1", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(8.dp))
             Text(
                 text = "Personal-use tag editor & file manager inspired by MP3Tag for Windows.\n\n" +
@@ -270,7 +270,7 @@ private fun AboutSettingsBlock() {
                     "rename from tags, batch regex & case transforms, full File Manager, " +
                     "multi-design-language Theme system (Material 3 Expressive, Material You, " +
                     "Liquid Glass, Halo), and adaptive phone/tablet layouts.\n\n" +
-                    "Roadmap: Automate workflows, MusicBrainz & Discogs lookup.",
+                    "Roadmap: Audio format conversion, Automate workflows, MusicBrainz & Discogs lookup.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

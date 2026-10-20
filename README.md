@@ -3,12 +3,12 @@
 A personal-use Android audio tag editor and file manager that mirrors the workflow of [MP3Tag](https://www.mp3tag.de) for
 Windows, built with Kotlin, Jetpack Compose, and **Material 3 Expressive**.
 
-- Current release: **v0.4.0** (`versionCode = 8`)
+- Current release: **v0.4.1** (`versionCode = 9`)
 - Minimum Android version: **12 (API 31)**
 - Uses the **All files access** permission (`MANAGE_EXTERNAL_STORAGE`) so it can browse any folder
   and rewrite files in place — sideload only, not for Play Store distribution.
 
-## Current status — v0.4.0
+## Current status — v0.4.1
 
 | Feature | State |
 |---|---|
@@ -36,6 +36,7 @@ Windows, built with Kotlin, Jetpack Compose, and **Material 3 Expressive**.
 | WAV: RIFF INFO + ID3 chunks (MP3Tag-style both) | ✅ |
 | DSD: DSF & DFF (DSDIFF) files tagged through their embedded ID3v2 tag | ✅ v0.4.0 |
 | FLAC, M4A/MP4/M4B, Ogg Vorbis, Opus, AIFF, WMA/ASF, APE (Monkey's Audio), WavPack (`.wv`) | ✅ v0.4.0 |
+| Audio format conversion (transcoding while preserving tags & cover art) | Roadmap |
 | MusicBrainz / Discogs metadata & cover lookup | Phase 3 remaining |
 
 ## Building
@@ -64,7 +65,7 @@ Pushing to `master` runs a GitHub Action that builds the versioned APK (`mp3tag-
 and publishes/updates the corresponding versioned GitHub Release (`v<versionName>`, marked as **Latest**):
 
 - Latest release page: `https://github.com/areyouanand/mp3tag-mobile/releases/latest`
-- Current release (`v0.4.0`): `https://github.com/areyouanand/mp3tag-mobile/releases/tag/v0.4.0`
+- Current release (`v0.4.1`): `https://github.com/areyouanand/mp3tag-mobile/releases/tag/v0.4.1`
 
 All builds — local and CI — sign with the committed shared debug keystore, so CI-built APKs install
 over previously installed versions without uninstalling.

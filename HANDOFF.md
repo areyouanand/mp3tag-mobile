@@ -19,7 +19,7 @@ Single user, sideloaded, never going to the Play Store.
   - **WMA / ASF** (`.wma`/`.asf`)
   - **APE** (Monkey's Audio `.ape`) & **WavPack** (`.wv`) via APEv2 (`APETAGEX`)
   - **DSF** (DSD) & **DFF** (DSDIFF `.dff`, embedded `"ID3 "` chunk in `"FRM8"`, ID3v2.3 / ID3v2.4 selectable)
-- versionName 0.4.0 / versionCode 8 (v0.1.0 phase 1, v0.2.1 phase 2, v0.2.2 adaptive UI + hardware scaling, v0.3.0 Home grid + File Manager + Automate, v0.3.1 folder selection + versioned APK/releases, v0.3.2 Theme Screen mode & Design language selector, v0.3.3 roadmap cleanup, v0.4.0 Phase 3 extended audio formats)
+- versionName 0.4.1 / versionCode 9 (v0.1.0 phase 1, v0.2.1 phase 2, v0.2.2 adaptive UI + hardware scaling, v0.3.0 Home grid + File Manager + Automate, v0.3.1 folder selection + versioned APK/releases, v0.3.2 Theme Screen mode & Design language selector, v0.3.3 roadmap cleanup, v0.4.0 Phase 3 extended audio formats, v0.4.1 audio format conversion added to roadmap)
 
 ## Locked-in product decisions (do not silently change)
 
@@ -31,7 +31,7 @@ Single user, sideloaded, never going to the Play Store.
 6. **Home Workspace Grid is the app entry point** — launches into 4 grid tiles (`Tag editor`, `File manager`, `Automate`, `Settings`). Only the grid tile for `Settings` is shown on the Home page (no duplicate top-bar gear icon).
 7. **Every change goes under a new release number (`versionName` / `versionCode`)** — bump `versionName` and `versionCode` in `app/build.gradle.kts` (and the version string in `SettingsScreen.kt`), tag `v<versionName>`, and let the GitHub Release + APK filename (`mp3tag-mobile-v<versionName>-debug.apk`) reflect that version.
 
-## Current state (v0.4.0 — everything below is verified working on the device)
+## Current state (v0.4.1 — everything below is verified working on the device)
 
 **Phase 3 Extended Audio Formats** (`data/tag/TagEngine.kt`, `DffTagHandler.kt`, `OpusTagHandler.kt`, `ApeTagHandler.kt`):
 - **DFF / DSDIFF (`.dff`)**: `DffTagHandler` parses the big-endian `FRM8` / `DSD ` / `PROP` (`FS  `, `CHNL`) / `DSD ` audio chunks for sample rate, channels, duration, and bitrate, and reads/writes an embedded `"ID3 "` chunk (respecting the user's ID3v2.3 / ID3v2.4 setting) including cover art.
@@ -190,6 +190,7 @@ mixed-cover detection. Section sits at the bottom of the editor (user requested)
 
 ## Roadmap
 
+- **Audio format conversion**: convert/transcode audio files between formats (e.g. FLAC/WAV/DSD/APE/WV ↔ MP3/Opus/M4A/FLAC/WAV) while preserving metadata tags and embedded cover art.
 - **Phase 3 remaining**: MusicBrainz + Cover Art Archive + Discogs online metadata and cover lookup.
 - **Automate workspace**: user requested the `Automate` section on the Home grid as a placeholder to be populated with automated tagging/file workflows in a future session.
 - **Free-form custom fields**: possibly support custom tag keys (`TXXX` / Vorbis freeform / MP4 `----:` atoms / APEv2 custom items) beyond the standard ~75-field catalog.
