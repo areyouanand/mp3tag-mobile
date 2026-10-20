@@ -3,6 +3,7 @@ package com.mp3tag.mobile.ui.browser
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -80,6 +81,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -88,9 +90,19 @@ import com.mp3tag.mobile.ui.common.EmptyState
 import com.mp3tag.mobile.ui.common.rememberAdaptiveWindowInfo
 import java.io.File
 
+private fun formatSelectionSummary(state: BrowserState): String {
+    val files = state.selectedPaths.size
+    val folders = state.selectedFolderPaths.size
+    return when {
+        folders > 0 && files > 0 -> "$folders folder(s), $files file(s) selected"
+        folders > 0 -> "$folders folder(s) selected"
+        else -> "$files selected"
+    }
+}
+
 /**
- * MP3Tag-style folder view: browse directories, tap files to (de)select,
- * long-press a file to open its tag editor directly.
+ * MP3Tag-style folder view: browse directories, select files or entire folders,
+ * or long-press a file/folder to open its tag editor directly.
  *
  * Adapts across form factors:
  * - Compact portrait phones: single-column with chip strips and bottom selection bar
@@ -120,10 +132,11 @@ fun BrowserScreen(
 
     val root = state.directory
     val isAtStart = !viewModel.canNavigateUp()
+    val hasSelection = state.totalSelectedCount > 0
 
     BackHandler {
         when {
-            state.selectedPaths.isNotEmpty() -> viewModel.clearSelection()
+            hasSelection -> viewModel.clearSelection()
             viewModel.canNavigateUp() -> viewModel.navigateUp()
             else -> onBackHome()
         }
@@ -136,6 +149,10 @@ fun BrowserScreen(
     val filteredFiles = remember(state.audioFiles, filter) {
         if (filter.isBlank()) state.audioFiles
         else state.audioFiles.filter { it.name.contains(filter, ignoreCase = true) }
+    }
+
+    val triggerEditSelected = {
+        viewModel.resolveSelectionForEdit(onEditFiles)
     }
 
     Scaffold(
@@ -176,9 +193,9 @@ fun BrowserScreen(
                     }
                     if (windowInfo.useTwoPane) {
                         IconButton(onClick = viewModel::selectAll) {
-                            Icon(Icons.Filled.SelectAll, contentDescription = "Select all files")
+                            Icon(Icons.Filled.SelectAll, contentDescription = "Select all")
                         }
-                        if (state.selectedPaths.isNotEmpty()) {
+                        if (hasSelection) {
                             IconButton(onClick = viewModel::clearSelection) {
                                 Icon(Icons.Filled.Close, contentDescription = "Clear selection")
                             }
@@ -200,7 +217,7 @@ fun BrowserScreen(
             // In compact 1-pane mode, show the selection bar at the bottom.
             // In 2-pane mode (phone landscape / tablet), selection actions live in the left pane
             // so the file list gets 100% of the vertical height.
-            AnimatedVisibility(visible = !windowInfo.useTwoPane && state.selectedPaths.isNotEmpty()) {
+            AnimatedVisibility(visible = !windowInfo.useTwoPane && hasSelection) {
                 Surface(color = MaterialTheme.colorScheme.surfaceContainer) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -210,13 +227,19 @@ fun BrowserScreen(
                             .padding(horizontal = 16.dp, vertical = 8.dp),
                     ) {
                         Text(
-                            text = "${state.selectedPaths.size} selected",
+                            text = formatSelectionSummary(state),
                             style = MaterialTheme.typography.titleMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
                         )
-                        Spacer(Modifier.weight(1f))
+                        Spacer(Modifier.width(8.dp))
                         TextButton(onClick = viewModel::clearSelection) { Text("Clear") }
                         Spacer(Modifier.width(8.dp))
-                        Button(onClick = { onEditFiles(viewModel.selectedFiles.map { it.absolutePath }) }) {
+                        Button(
+                            onClick = triggerEditSelected,
+                            enabled = !state.resolvingSelection,
+                        ) {
                             Icon(Icons.Filled.Edit, contentDescription = null)
                             Spacer(Modifier.width(6.dp))
                             Text("Edit")
@@ -226,94 +249,141 @@ fun BrowserScreen(
             }
         },
     ) { padding ->
-        val contentModifier = Modifier
-            .fillMaxSize()
-            .padding(padding)
-            .windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal))
-
-        if (windowInfo.useTwoPane) {
-            Row(modifier = contentModifier) {
-                BrowserSidePane(
-                    state = state,
-                    filter = filter,
-                    onFilterChange = { filter = it },
-                    onOpenVolume = viewModel::openVolume,
-                    onOpenDir = { viewModel.open(it) },
-                    onClearSelection = viewModel::clearSelection,
-                    onEditSelected = { onEditFiles(viewModel.selectedFiles.map { it.absolutePath }) },
-                    modifier = Modifier
-                        .width(windowInfo.sidePaneWidth)
-                        .fillMaxHeight(),
-                )
-                VerticalDivider()
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight(),
-                ) {
-                    BrowserListContent(
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal)),
+        ) {
+            if (windowInfo.useTwoPane) {
+                Row(modifier = Modifier.fillMaxSize()) {
+                    BrowserSidePane(
                         state = state,
-                        filteredDirs = filteredDirs,
-                        filteredFiles = filteredFiles,
-                        columns = windowInfo.browserListColumns,
-                        onOpenDir = viewModel::open,
-                        onToggleSelect = viewModel::toggleSelect,
-                        onEditSingle = { file -> onEditFiles(listOf(file.absolutePath)) },
+                        filter = filter,
+                        onFilterChange = { filter = it },
+                        onOpenVolume = viewModel::openVolume,
+                        onOpenDir = { viewModel.open(it) },
+                        onClearSelection = viewModel::clearSelection,
+                        onEditSelected = triggerEditSelected,
+                        modifier = Modifier
+                            .width(windowInfo.sidePaneWidth)
+                            .fillMaxHeight(),
                     )
+                    VerticalDivider()
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight(),
+                    ) {
+                        BrowserStatusBanner(
+                            message = state.statusMessage,
+                            onDismiss = viewModel::dismissStatus,
+                        )
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth(),
+                        ) {
+                            BrowserListContent(
+                                state = state,
+                                filteredDirs = filteredDirs,
+                                filteredFiles = filteredFiles,
+                                columns = windowInfo.browserListColumns,
+                                onOpenDir = viewModel::open,
+                                onToggleSelectDir = viewModel::toggleSelectFolder,
+                                onEditDir = { dir -> viewModel.editEntireFolder(dir, onEditFiles) },
+                                onToggleSelect = viewModel::toggleSelect,
+                                onEditSingle = { file -> onEditFiles(listOf(file.absolutePath)) },
+                            )
+                        }
+                    }
+                }
+            } else {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    BrowserStatusBanner(
+                        message = state.statusMessage,
+                        onDismiss = viewModel::dismissStatus,
+                    )
+
+                    FilterSearchField(
+                        filter = filter,
+                        onFilterChange = { filter = it },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 4.dp),
+                    )
+
+                    if (state.volumes.isNotEmpty()) {
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 16.dp),
+                            modifier = Modifier.padding(vertical = 4.dp),
+                        ) {
+                            items(state.volumes, key = { it.directory.absolutePath }) { volume ->
+                                VolumeChip(
+                                    volume = volume,
+                                    isCurrentVolume = state.directory.absolutePath
+                                        .startsWith(volume.directory.absolutePath),
+                                    onClick = { viewModel.openVolume(volume) },
+                                    modifier = Modifier.padding(end = 8.dp),
+                                )
+                            }
+                        }
+                    }
+
+                    if (state.recents.isNotEmpty() && isAtStart) {
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 16.dp),
+                            modifier = Modifier.padding(vertical = 4.dp),
+                        ) {
+                            items(state.recents, key = { it }) { path ->
+                                AssistChip(
+                                    onClick = { viewModel.open(File(path)) },
+                                    label = { Text(File(path).name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                    modifier = Modifier.padding(end = 8.dp),
+                                )
+                            }
+                        }
+                    }
+
+                    Box(Modifier.weight(1f).fillMaxWidth()) {
+                        BrowserListContent(
+                            state = state,
+                            filteredDirs = filteredDirs,
+                            filteredFiles = filteredFiles,
+                            columns = 1,
+                            onOpenDir = viewModel::open,
+                            onToggleSelectDir = viewModel::toggleSelectFolder,
+                            onEditDir = { dir -> viewModel.editEntireFolder(dir, onEditFiles) },
+                            onToggleSelect = viewModel::toggleSelect,
+                            onEditSingle = { file -> onEditFiles(listOf(file.absolutePath)) },
+                        )
+                    }
                 }
             }
-        } else {
-            Column(modifier = contentModifier) {
-                FilterSearchField(
-                    filter = filter,
-                    onFilterChange = { filter = it },
+
+            if (state.resolvingSelection) {
+                Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp),
-                )
-
-                if (state.volumes.isNotEmpty()) {
-                    LazyRow(
-                        contentPadding = PaddingValues(horizontal = 16.dp),
-                        modifier = Modifier.padding(vertical = 4.dp),
+                        .matchParentSize()
+                        .background(Color.Black.copy(alpha = 0.45f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Surface(
+                        shape = MaterialTheme.shapes.medium,
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
                     ) {
-                        items(state.volumes, key = { it.directory.absolutePath }) { volume ->
-                            VolumeChip(
-                                volume = volume,
-                                isCurrentVolume = state.directory.absolutePath
-                                    .startsWith(volume.directory.absolutePath),
-                                onClick = { viewModel.openVolume(volume) },
-                                modifier = Modifier.padding(end = 8.dp),
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
+                        ) {
+                            LoadingIndicator()
+                            Spacer(Modifier.height(10.dp))
+                            Text(
+                                text = "Scanning folder audio files…",
+                                style = MaterialTheme.typography.bodyMedium,
                             )
                         }
                     }
-                }
-
-                if (state.recents.isNotEmpty() && isAtStart) {
-                    LazyRow(
-                        contentPadding = PaddingValues(horizontal = 16.dp),
-                        modifier = Modifier.padding(vertical = 4.dp),
-                    ) {
-                        items(state.recents, key = { it }) { path ->
-                            AssistChip(
-                                onClick = { viewModel.open(File(path)) },
-                                label = { Text(File(path).name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                                modifier = Modifier.padding(end = 8.dp),
-                            )
-                        }
-                    }
-                }
-
-                Box(Modifier.weight(1f).fillMaxWidth()) {
-                    BrowserListContent(
-                        state = state,
-                        filteredDirs = filteredDirs,
-                        filteredFiles = filteredFiles,
-                        columns = 1,
-                        onOpenDir = viewModel::open,
-                        onToggleSelect = viewModel::toggleSelect,
-                        onEditSingle = { file -> onEditFiles(listOf(file.absolutePath)) },
-                    )
                 }
             }
         }
@@ -333,7 +403,15 @@ fun BrowserScreen(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
                 )
                 ListItem(
-                    headlineContent = { Text("Select all files") },
+                    headlineContent = { Text("Edit all audio in this folder") },
+                    leadingContent = { Icon(Icons.Filled.Edit, contentDescription = null) },
+                    modifier = Modifier.clickable {
+                        menuSheetOpen = false
+                        viewModel.editEntireFolder(state.directory, onEditFiles)
+                    },
+                )
+                ListItem(
+                    headlineContent = { Text("Select all") },
                     leadingContent = { Icon(Icons.Filled.SelectAll, contentDescription = null) },
                     modifier = Modifier.clickable {
                         menuSheetOpen = false
@@ -418,6 +496,33 @@ fun BrowserScreen(
     }
 }
 
+@Composable
+private fun BrowserStatusBanner(
+    message: String?,
+    onDismiss: () -> Unit,
+) {
+    if (message == null) return
+    Surface(
+        color = MaterialTheme.colorScheme.tertiaryContainer,
+        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+        ) {
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.weight(1f),
+            )
+            IconButton(onClick = onDismiss) {
+                Icon(Icons.Filled.Close, contentDescription = "Dismiss")
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun BrowserSidePane(
@@ -442,7 +547,7 @@ private fun BrowserSidePane(
             modifier = Modifier.fillMaxWidth(),
         )
 
-        if (state.selectedPaths.isNotEmpty()) {
+        if (state.totalSelectedCount > 0) {
             Card(
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.secondaryContainer,
@@ -451,7 +556,7 @@ private fun BrowserSidePane(
             ) {
                 Column(Modifier.padding(12.dp)) {
                     Text(
-                        text = "${state.selectedPaths.size} file(s) selected",
+                        text = formatSelectionSummary(state),
                         style = MaterialTheme.typography.titleSmall,
                         color = MaterialTheme.colorScheme.onSecondaryContainer,
                     )
@@ -462,6 +567,7 @@ private fun BrowserSidePane(
                     ) {
                         Button(
                             onClick = onEditSelected,
+                            enabled = !state.resolvingSelection,
                             modifier = Modifier.weight(1f),
                         ) {
                             Icon(Icons.Filled.Edit, contentDescription = null)
@@ -593,6 +699,8 @@ private fun BrowserListContent(
     filteredFiles: List<File>,
     columns: Int,
     onOpenDir: (File) -> Unit,
+    onToggleSelectDir: (File) -> Unit,
+    onEditDir: (File) -> Unit,
     onToggleSelect: (File) -> Unit,
     onEditSingle: (File) -> Unit,
 ) {
@@ -620,7 +728,14 @@ private fun BrowserListContent(
                 key = { "dir:" + it.absolutePath },
                 contentType = { "dir" },
             ) { dir ->
-                DirectoryRow(dir = dir, onOpen = { onOpenDir(dir) })
+                val path = dir.absolutePath
+                DirectoryRow(
+                    dir = dir,
+                    selected = path in state.selectedFolderPaths,
+                    onOpen = { onOpenDir(dir) },
+                    onToggleSelect = { onToggleSelectDir(dir) },
+                    onEditFolder = { onEditDir(dir) },
+                )
             }
             items(
                 items = filteredFiles,
@@ -653,8 +768,15 @@ private fun BrowserListContent(
                 ) { row ->
                     Row(Modifier.fillMaxWidth()) {
                         row.forEach { dir ->
+                            val path = dir.absolutePath
                             Box(Modifier.weight(1f)) {
-                                DirectoryRow(dir = dir, onOpen = { onOpenDir(dir) })
+                                DirectoryRow(
+                                    dir = dir,
+                                    selected = path in state.selectedFolderPaths,
+                                    onOpen = { onOpenDir(dir) },
+                                    onToggleSelect = { onToggleSelectDir(dir) },
+                                    onEditFolder = { onEditDir(dir) },
+                                )
                             }
                         }
                         repeat(columns - row.size) {
@@ -695,12 +817,37 @@ private fun BrowserListContent(
 @Composable
 private fun DirectoryRow(
     dir: File,
+    selected: Boolean,
     onOpen: () -> Unit,
+    onToggleSelect: () -> Unit,
+    onEditFolder: () -> Unit,
 ) {
     ListItem(
         headlineContent = { Text(dir.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-        leadingContent = { Icon(Icons.Filled.Folder, contentDescription = null) },
-        modifier = Modifier.combinedClickable(onClick = onOpen),
+        leadingContent = {
+            Icon(
+                Icons.Filled.Folder,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+            )
+        },
+        trailingContent = {
+            Checkbox(
+                checked = selected,
+                onCheckedChange = { onToggleSelect() },
+            )
+        },
+        colors = ListItemDefaults.colors(
+            containerColor = if (selected) {
+                MaterialTheme.colorScheme.secondaryContainer
+            } else {
+                MaterialTheme.colorScheme.surface
+            },
+        ),
+        modifier = Modifier.combinedClickable(
+            onClick = onOpen,
+            onLongClick = onEditFolder,
+        ),
     )
 }
 
@@ -728,7 +875,7 @@ private fun AudioFileRow(
             )
         },
         trailingContent = {
-            Checkbox(checked = selected, onCheckedChange = null)
+            Checkbox(checked = selected, onCheckedChange = { onToggleSelect() })
         },
         colors = ListItemDefaults.colors(
             containerColor = if (selected) {

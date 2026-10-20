@@ -15,7 +15,7 @@ Windows, built with Kotlin, Jetpack Compose and **Material 3 Expressive**.
 | **Full File Manager (copy, move/cut, paste, rename, delete, new folder, sort, hidden files, properties, open in Tag Editor)** | ✅ v0.3.0 |
 | **Automate workspace section (placeholder ready for automation rules)** | ✅ v0.3.0 |
 | Folder browser with filter, recent folders, storage-device picker, natural sorting | ✅ |
-| Multi-select files, batch tag editing with MP3Tag-style "mixed" field handling | ✅ |
+| Multi-select files & entire folders (checkbox or long-press folder), batch tag editing with MP3Tag-style "mixed" field handling | ✅ |
 | Editor file picker: include/exclude files from the edit (MP3Tag-style) | ✅ |
 | Single-file editing (long-press a file) | ✅ |
 | Fields: title, artist, album artist, album, year, track/disc + totals, genre, composer, comment | ✅ |

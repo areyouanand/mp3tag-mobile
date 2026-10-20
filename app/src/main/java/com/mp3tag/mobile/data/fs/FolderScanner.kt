@@ -54,6 +54,45 @@ object FolderScanner {
         return Listing(dirs, files, subtitles)
     }
 
+    /**
+     * Recursively collects all supported audio files inside [dir] (and its subfolders),
+     * sorted in natural order per directory level.
+     */
+    fun collectAudioFilesRecursively(dir: File): List<File> {
+        val result = ArrayList<File>()
+        val natCmp = naturalComparator()
+
+        fun walk(current: File) {
+            val entries = current.listFiles() ?: return
+            val subDirs = ArrayList<File>()
+            val files = ArrayList<File>()
+            for (entry in entries) {
+                val name = entry.name
+                if (name.startsWith(".")) continue
+                val dot = name.lastIndexOf('.')
+                val extLower = if (dot > 0 && dot < name.length - 1) {
+                    name.substring(dot + 1).lowercase()
+                } else {
+                    ""
+                }
+                if (extLower in AUDIO_EXTENSIONS && entry.isFile) {
+                    files.add(entry)
+                } else if (entry.isDirectory) {
+                    subDirs.add(entry)
+                }
+            }
+            files.sortWith { a, b -> natCmp.compare(a.name, b.name) }
+            subDirs.sortWith { a, b -> natCmp.compare(a.name, b.name) }
+            result.addAll(files)
+            for (sub in subDirs) {
+                walk(sub)
+            }
+        }
+
+        walk(dir)
+        return result
+    }
+
     /** Numeric-aware ("natural") file-name ordering, like MP3Tag's file list. */
     fun naturalComparator(): Comparator<String> = Comparator { a, b -> compareNatural(a, b) }
 

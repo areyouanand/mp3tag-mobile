@@ -13,7 +13,7 @@ Single user, sideloaded, never going to the Play Store.
 - minSdk 31 (Android 12), target/compile SDK 36, AGP 8.13.2, Kotlin 2.4.21, Gradle 8.14.4 (wrapper)
 - Tag engine: **JAudioTagger 3.0.1** (pure Java): MP3 (ID3v1 preserved; v2.3/v2.4 selectable),
   FLAC, M4A/MP4, Ogg Vorbis, **WAV (ID3 + RIFF INFO chunks)**, **DSF (DSD, embedded ID3v2)**
-- versionName 0.3.0 / versionCode 4 (v0.1.0 phase 1, v0.2.1 phase 2, v0.2.2 adaptive UI + hardware scaling, v0.3.0 Home grid + File Manager + Automate)
+- versionName 0.3.1 / versionCode 5 (v0.1.0 phase 1, v0.2.1 phase 2, v0.2.2 adaptive UI + hardware scaling, v0.3.0 Home grid + File Manager + Automate, v0.3.1 folder selection in Tag Editor + single Settings tile on Home)
 
 ## Locked-in product decisions (do not silently change)
 
@@ -24,14 +24,14 @@ Single user, sideloaded, never going to the Play Store.
 4. All pickers/menus are **ModalBottomSheets** — NOT DropdownMenu (broken on the device; see gotchas).
 5. Editing follows MP3Tag semantics, implemented as a **per-file cached-edit model** (see below).
 
-## Current state (v0.3.0 — everything below is verified working on the device)
+## Current state (v0.3.1 — everything below is verified working on the device)
 
 **Home Workspace Grid** (`ui/home/HomeScreen.kt`):
 - Launches into a Material 3 Expressive grid dashboard (`2` columns on phones, `3` columns on wide tablets/landscape `>= 900dp`) with cards for:
   1. **Tag editor**: opens the existing MP3Tag folder browser and batch/single tag editor workflow.
   2. **File manager**: opens the full-storage file manager (`ui/filemanager/`).
   3. **Automate**: opens the `AutomateScreen` (`ui/automate/`) placeholder for upcoming automated workflows.
-  4. **Settings**: opens app settings and returns to whichever workspace launched it.
+  4. **Settings**: opens app settings and returns to whichever workspace launched it (the duplicate top-bar settings icon on the Home screen was removed per user request).
 
 **File Manager** (`ui/filemanager/FileManagerScreen.kt`, `FileManagerViewModel.kt`):
 - Full storage file & folder browser across Internal storage, SD card, and USB OTG with interactive breadcrumb path bar, search filter, and adaptive 1-pane / 2-pane layouts.
@@ -55,6 +55,10 @@ card) + "Choose storage…" sheet (USB-OTG included automatically), natural nume
 filter, recent-folder chips, overflow menu (select all / clear / refresh / settings).
 
 **Multi-select + editor**: tap files to select, long-press one file to edit it directly.
+Folders in Tag Editor also have a **trailing checkbox** (tap the folder row to open it, tap its
+checkbox to include all audio files inside that folder recursively in the selection, or
+**long-press a folder** to immediately open all its audio files in the tag editor; also available
+via "Edit all audio in this folder" in the Browser actions menu).
 Editor header shows "N of M files • formats" and opens a **file picker sheet** with checkboxes
 (include/exclude files from the current edit; Select all / Deselect all) — MP3Tag's selection
 checkboxes. Leaving the editor with pending edits pops an **exit confirmation**

@@ -226,7 +226,7 @@ private fun AboutSettingsBlock() {
     SectionHeader("About")
     Card(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Column(Modifier.padding(16.dp)) {
-            Text("MP3Tag Mobile 0.3.0", style = MaterialTheme.typography.titleMedium)
+            Text("MP3Tag Mobile 0.3.1", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(8.dp))
             Text(
                 text = "Personal-use tag editor & file manager inspired by MP3Tag for Windows.\n\n" +

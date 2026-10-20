@@ -31,11 +31,17 @@ data class BrowserState(
     val audioFiles: List<File> = emptyList(),
     val fileSubtitles: Map<String, String> = emptyMap(),
     val selectedPaths: Set<String> = emptySet(),
+    val selectedFolderPaths: Set<String> = emptySet(),
     val loading: Boolean = false,
+    val resolvingSelection: Boolean = false,
+    val statusMessage: String? = null,
     val error: String? = null,
     val recents: List<String> = emptyList(),
     val volumes: List<StorageVolumeInfo> = emptyList(),
-)
+) {
+    val totalSelectedCount: Int
+        get() = selectedPaths.size + selectedFolderPaths.size
+}
 
 class BrowserViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -60,8 +66,10 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             it.copy(
                 loading = true,
                 error = null,
+                statusMessage = null,
                 directory = directory,
                 selectedPaths = emptySet(),
+                selectedFolderPaths = emptySet(),
             )
         }
         loadJob = viewModelScope.launch {
@@ -113,14 +121,87 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     fun toggleSelect(file: File) = _state.update {
         val selection = it.selectedPaths.toMutableSet()
         if (!selection.add(file.absolutePath)) selection.remove(file.absolutePath)
-        it.copy(selectedPaths = selection)
+        it.copy(selectedPaths = selection, statusMessage = null)
+    }
+
+    fun toggleSelectFolder(dir: File) = _state.update {
+        val selection = it.selectedFolderPaths.toMutableSet()
+        if (!selection.add(dir.absolutePath)) selection.remove(dir.absolutePath)
+        it.copy(selectedFolderPaths = selection, statusMessage = null)
     }
 
     fun selectAll() = _state.update {
-        it.copy(selectedPaths = it.audioFiles.map { f -> f.absolutePath }.toSet())
+        it.copy(
+            selectedPaths = it.audioFiles.map { f -> f.absolutePath }.toSet(),
+            selectedFolderPaths = it.directories.map { d -> d.absolutePath }.toSet(),
+            statusMessage = null,
+        )
     }
 
-    fun clearSelection() = _state.update { it.copy(selectedPaths = emptySet()) }
+    fun clearSelection() = _state.update {
+        it.copy(selectedPaths = emptySet(), selectedFolderPaths = emptySet(), statusMessage = null)
+    }
+
+    fun dismissStatus() = _state.update { it.copy(statusMessage = null) }
+
+    /**
+     * Resolves all selected folders (recursively) + selected individual audio files
+     * into a deduplicated list of audio file paths and passes them to [onReady].
+     */
+    fun resolveSelectionForEdit(onReady: (List<String>) -> Unit) {
+        val current = _state.value
+        if (current.resolvingSelection) return
+        if (current.selectedFolderPaths.isEmpty()) {
+            val direct = current.selectedPaths.toList()
+            if (direct.isNotEmpty()) onReady(direct)
+            return
+        }
+        viewModelScope.launch {
+            _state.update { it.copy(resolvingSelection = true, statusMessage = null) }
+            val resolved = withContext(Dispatchers.IO) {
+                val combined = LinkedHashSet<String>()
+                for (folderPath in current.selectedFolderPaths) {
+                    val folderFiles = FolderScanner.collectAudioFilesRecursively(File(folderPath))
+                    for (f in folderFiles) {
+                        combined.add(f.absolutePath)
+                    }
+                }
+                for (filePath in current.selectedPaths) {
+                    combined.add(filePath)
+                }
+                combined.toList()
+            }
+            _state.update { it.copy(resolvingSelection = false) }
+            if (resolved.isEmpty()) {
+                _state.update {
+                    it.copy(statusMessage = "No supported audio files found inside the selected folder(s)")
+                }
+            } else {
+                onReady(resolved)
+            }
+        }
+    }
+
+    /**
+     * Collects all supported audio files inside [dir] (recursively) and opens the editor.
+     */
+    fun editEntireFolder(dir: File, onReady: (List<String>) -> Unit) {
+        if (_state.value.resolvingSelection) return
+        viewModelScope.launch {
+            _state.update { it.copy(resolvingSelection = true, statusMessage = null) }
+            val resolved = withContext(Dispatchers.IO) {
+                FolderScanner.collectAudioFilesRecursively(dir).map { it.absolutePath }
+            }
+            _state.update { it.copy(resolvingSelection = false) }
+            if (resolved.isEmpty()) {
+                _state.update {
+                    it.copy(statusMessage = "No supported audio files found in '${dir.name}'")
+                }
+            } else {
+                onReady(resolved)
+            }
+        }
+    }
 
     private fun rememberRecent(directory: File) {
         val recents = (listOf(directory.absolutePath) + prefs.recentFolders).distinct().take(8)
