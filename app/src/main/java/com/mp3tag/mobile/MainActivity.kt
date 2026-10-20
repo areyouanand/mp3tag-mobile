@@ -38,6 +38,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mp3tag.mobile.data.prefs.AppPrefs
+import com.mp3tag.mobile.data.prefs.DesignLanguage
 import com.mp3tag.mobile.data.prefs.Id3Version
 import com.mp3tag.mobile.data.prefs.PerformanceMode
 import com.mp3tag.mobile.data.prefs.ThemeMode
@@ -95,6 +96,9 @@ class AppViewModel(application: android.app.Application) : AndroidViewModel(appl
     private val _themeMode = MutableStateFlow(prefs.themeMode)
     val themeMode = _themeMode.asStateFlow()
 
+    private val _designLanguage = MutableStateFlow(prefs.designLanguage)
+    val designLanguage = _designLanguage.asStateFlow()
+
     private val _id3Version = MutableStateFlow(prefs.id3Version)
     val id3Version = _id3Version.asStateFlow()
 
@@ -148,6 +152,11 @@ class AppViewModel(application: android.app.Application) : AndroidViewModel(appl
         _themeMode.value = mode
     }
 
+    fun setDesignLanguage(language: DesignLanguage) {
+        prefs.designLanguage = language
+        _designLanguage.value = language
+    }
+
     fun setId3Version(version: Id3Version) {
         prefs.id3Version = version
         _id3Version.value = version
@@ -163,6 +172,7 @@ class AppViewModel(application: android.app.Application) : AndroidViewModel(appl
 @Composable
 fun Mp3tagApp(appViewModel: AppViewModel = viewModel()) {
     val themeMode by appViewModel.themeMode.collectAsState()
+    val designLanguage by appViewModel.designLanguage.collectAsState()
     val id3Version by appViewModel.id3Version.collectAsState()
     val performanceMode by appViewModel.performanceMode.collectAsState()
     val hasPermission by appViewModel.hasPermission.collectAsState()
@@ -186,6 +196,7 @@ fun Mp3tagApp(appViewModel: AppViewModel = viewModel()) {
             ThemeMode.LIGHT -> false
             ThemeMode.DARK -> true
         },
+        designLanguage = designLanguage,
     ) {
         if (!hasPermission) {
             PermissionGate(onRequest = { requestAllFilesAccess(context) })
@@ -237,6 +248,8 @@ fun Mp3tagApp(appViewModel: AppViewModel = viewModel()) {
                     onId3VersionChange = appViewModel::setId3Version,
                     themeMode = themeMode,
                     onThemeChange = appViewModel::setThemeMode,
+                    designLanguage = designLanguage,
+                    onDesignLanguageChange = appViewModel::setDesignLanguage,
                     performanceMode = performanceMode,
                     onPerformanceModeChange = appViewModel::setPerformanceMode,
                     onBack = appViewModel::back,

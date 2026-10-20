@@ -1,5 +1,6 @@
 package com.mp3tag.mobile.ui.home
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,11 +30,10 @@ import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -45,7 +45,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.mp3tag.mobile.data.prefs.DesignLanguage
 import com.mp3tag.mobile.ui.common.rememberAdaptiveWindowInfo
+import com.mp3tag.mobile.ui.theme.LocalDesignLanguage
 
 private data class HomeTileItem(
     val id: String,
@@ -103,7 +105,7 @@ fun HomeScreen(
         HomeTileItem(
             id = "settings",
             title = "Settings",
-            subtitle = "ID3v2 version, theme mode & device hardware performance",
+            subtitle = "Screen mode, design language, ID3v2 version & device performance",
             badge = null,
             icon = Icons.Filled.Settings,
             containerColor = scheme.surfaceContainerHigh,
@@ -178,11 +180,28 @@ private fun HomeGridCard(
     tile: HomeTileItem,
     compactHeight: Boolean,
 ) {
-    ElevatedCard(
+    val designLanguage = LocalDesignLanguage.current
+    val borderColor = when (designLanguage) {
+        DesignLanguage.LIQUID_GLASS -> tile.contentColor.copy(alpha = 0.28f)
+        DesignLanguage.HALO -> MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
+        else -> tile.contentColor.copy(alpha = 0.08f)
+    }
+    val borderWidth = when (designLanguage) {
+        DesignLanguage.LIQUID_GLASS,
+        DesignLanguage.HALO -> 1.5.dp
+        else -> 0.5.dp
+    }
+    val containerColor = when (designLanguage) {
+        DesignLanguage.LIQUID_GLASS -> tile.containerColor.copy(alpha = 0.86f)
+        else -> tile.containerColor
+    }
+
+    OutlinedCard(
         onClick = tile.onClick,
         shape = MaterialTheme.shapes.extraLarge,
-        colors = CardDefaults.elevatedCardColors(
-            containerColor = tile.containerColor,
+        border = BorderStroke(borderWidth, borderColor),
+        colors = CardDefaults.outlinedCardColors(
+            containerColor = containerColor,
             contentColor = tile.contentColor,
         ),
         modifier = Modifier

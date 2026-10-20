@@ -13,7 +13,7 @@ Single user, sideloaded, never going to the Play Store.
 - minSdk 31 (Android 12), target/compile SDK 36, AGP 8.13.2, Kotlin 2.4.21, Gradle 8.14.4 (wrapper)
 - Tag engine: **JAudioTagger 3.0.1** (pure Java): MP3 (ID3v1 preserved; v2.3/v2.4 selectable),
   FLAC, M4A/MP4, Ogg Vorbis, **WAV (ID3 + RIFF INFO chunks)**, **DSF (DSD, embedded ID3v2)**
-- versionName 0.3.1 / versionCode 5 (v0.1.0 phase 1, v0.2.1 phase 2, v0.2.2 adaptive UI + hardware scaling, v0.3.0 Home grid + File Manager + Automate, v0.3.1 folder selection in Tag Editor + single Settings tile on Home)
+- versionName 0.3.2 / versionCode 6 (v0.1.0 phase 1, v0.2.1 phase 2, v0.2.2 adaptive UI + hardware scaling, v0.3.0 Home grid + File Manager + Automate, v0.3.1 folder selection + versioned APK/releases, v0.3.2 Theme Screen mode & Design language selector)
 
 ## Locked-in product decisions (do not silently change)
 
@@ -26,7 +26,16 @@ Single user, sideloaded, never going to the Play Store.
 6. **Home Workspace Grid is the app entry point** — launches into 4 grid tiles (`Tag editor`, `File manager`, `Automate`, `Settings`). Only the grid tile for `Settings` is shown on the Home page (no duplicate top-bar gear icon).
 7. **Every change goes under a new release number (`versionName` / `versionCode`)** — bump `versionName` and `versionCode` in `app/build.gradle.kts` (and the version string in `SettingsScreen.kt`), tag `v<versionName>`, and let the GitHub Release + APK filename (`mp3tag-mobile-v<versionName>-debug.apk`) reflect that version.
 
-## Current state (v0.3.1 — everything below is verified working on the device)
+## Current state (v0.3.2 — everything below is verified working on the device)
+
+**Theme: Screen Mode & Design Language** (`ui/theme/Theme.kt`, `ui/settings/SettingsScreen.kt`, `data/prefs/AppPrefs.kt`):
+- Settings → **Theme** section includes two subsections:
+  1. **Screen mode**: `Auto (follow system)`, `Dark`, and `Light`.
+  2. **Design language**:
+     - **Material 3 Expressive** (Google's latest Android 16 expressive design language: spring motion, bold pill geometry, dynamic tonal surfaces)
+     - **Material You (Google Dynamic)** (Google's wallpaper-driven dynamic palette with classic M3 geometry)
+     - **Liquid Glass** (translucent frosted-glass azure/cyan palette, luminous borders, fluid 38dp capsule shapes)
+     - **Halo** (deep OLED-friendly contrast, glowing neon cyan/violet aura accents, crisp cut/angular geometry & monospace labels)
 
 **Home Workspace Grid** (`ui/home/HomeScreen.kt`):
 - Launches into a Material 3 Expressive grid dashboard (`2` columns on phones, `3` columns on wide tablets/landscape `>= 900dp`) with cards for:

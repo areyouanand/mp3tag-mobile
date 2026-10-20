@@ -34,6 +34,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.mp3tag.mobile.data.prefs.DesignLanguage
 import com.mp3tag.mobile.data.prefs.Id3Version
 import com.mp3tag.mobile.data.prefs.PerformanceMode
 import com.mp3tag.mobile.data.prefs.ThemeMode
@@ -49,6 +50,8 @@ fun SettingsScreen(
     onId3VersionChange: (Id3Version) -> Unit,
     themeMode: ThemeMode,
     onThemeChange: (ThemeMode) -> Unit,
+    designLanguage: DesignLanguage = DesignLanguage.MATERIAL_3_EXPRESSIVE,
+    onDesignLanguageChange: (DesignLanguage) -> Unit = {},
     performanceMode: PerformanceMode = PerformanceMode.AUTO,
     onPerformanceModeChange: (PerformanceMode) -> Unit = {},
     onBack: () -> Unit,
@@ -91,16 +94,18 @@ fun SettingsScreen(
                             horizontalArrangement = Arrangement.spacedBy(24.dp),
                         ) {
                             Column(Modifier.weight(1f)) {
+                                ThemeSettingsBlock(
+                                    themeMode = themeMode,
+                                    onThemeChange = onThemeChange,
+                                    designLanguage = designLanguage,
+                                    onDesignLanguageChange = onDesignLanguageChange,
+                                )
+                            }
+                            Column(Modifier.weight(1f)) {
                                 TagSettingsBlock(
                                     id3Version = id3Version,
                                     onId3VersionChange = onId3VersionChange,
                                 )
-                                ThemeSettingsBlock(
-                                    themeMode = themeMode,
-                                    onThemeChange = onThemeChange,
-                                )
-                            }
-                            Column(Modifier.weight(1f)) {
                                 PerformanceSettingsBlock(
                                     performanceMode = performanceMode,
                                     onPerformanceModeChange = onPerformanceModeChange,
@@ -115,15 +120,17 @@ fun SettingsScreen(
                     }
                 } else {
                     item {
-                        TagSettingsBlock(
-                            id3Version = id3Version,
-                            onId3VersionChange = onId3VersionChange,
-                        )
-                    }
-                    item {
                         ThemeSettingsBlock(
                             themeMode = themeMode,
                             onThemeChange = onThemeChange,
+                            designLanguage = designLanguage,
+                            onDesignLanguageChange = onDesignLanguageChange,
+                        )
+                    }
+                    item {
+                        TagSettingsBlock(
+                            id3Version = id3Version,
+                            onId3VersionChange = onId3VersionChange,
                         )
                     }
                     item {
@@ -143,6 +150,50 @@ fun SettingsScreen(
                 item {
                     Spacer(Modifier.navigationBarsPadding().height(16.dp))
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ThemeSettingsBlock(
+    themeMode: ThemeMode,
+    onThemeChange: (ThemeMode) -> Unit,
+    designLanguage: DesignLanguage,
+    onDesignLanguageChange: (DesignLanguage) -> Unit,
+) {
+    SectionHeader("Theme")
+    Card(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        Column(Modifier.padding(16.dp)) {
+            Text(
+                text = "Screen mode",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(bottom = 4.dp),
+            )
+            ThemeMode.entries.forEach { mode ->
+                RadioRow(
+                    label = mode.label,
+                    selected = themeMode == mode,
+                    onClick = { onThemeChange(mode) },
+                )
+            }
+
+            Spacer(Modifier.height(14.dp))
+
+            Text(
+                text = "Design language",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(bottom = 4.dp),
+            )
+            DesignLanguage.entries.forEach { language ->
+                RadioRow(
+                    label = language.label,
+                    subtitle = language.description,
+                    selected = designLanguage == language,
+                    onClick = { onDesignLanguageChange(language) },
+                )
             }
         }
     }
@@ -181,23 +232,6 @@ private fun TagSettingsBlock(
 }
 
 @Composable
-private fun ThemeSettingsBlock(
-    themeMode: ThemeMode,
-    onThemeChange: (ThemeMode) -> Unit,
-) {
-    SectionHeader("Theme")
-    Column {
-        ThemeMode.entries.forEach { mode ->
-            RadioRow(
-                label = mode.label,
-                selected = themeMode == mode,
-                onClick = { onThemeChange(mode) },
-            )
-        }
-    }
-}
-
-@Composable
 private fun PerformanceSettingsBlock(
     performanceMode: PerformanceMode,
     onPerformanceModeChange: (PerformanceMode) -> Unit,
@@ -226,14 +260,15 @@ private fun AboutSettingsBlock() {
     SectionHeader("About")
     Card(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Column(Modifier.padding(16.dp)) {
-            Text("MP3Tag Mobile 0.3.1", style = MaterialTheme.typography.titleMedium)
+            Text("MP3Tag Mobile 0.3.2", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(8.dp))
             Text(
                 text = "Personal-use tag editor & file manager inspired by MP3Tag for Windows.\n\n" +
                     "Supported now: Home workspace grid, Tag Editor for MP3 (ID3v1/v2.3/v2.4), FLAC, " +
                     "M4A/MP4, Ogg, WAV (RIFF INFO + ID3), DSF (DSD), tags from filename, rename from tags, " +
                     "batch regex & case transforms, full File Manager (copy, move, rename, delete, new folder, " +
-                    "sort, properties), and adaptive phone/tablet layouts.\n\n" +
+                    "sort, properties), multi-design-language Theme system (Material 3 Expressive, Material You, " +
+                    "Liquid Glass, Halo), and adaptive phone/tablet layouts.\n\n" +
                     "Roadmap: Automate workflows, CSV tag export/import, DFF (DSDIFF) via TagLib, " +
                     "Opus/WMA/APE, MusicBrainz & Discogs lookup.",
                 style = MaterialTheme.typography.bodyMedium,

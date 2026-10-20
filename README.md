@@ -3,15 +3,16 @@
 A personal-use Android audio tag editor and file manager that mirrors the workflow of [MP3Tag](https://www.mp3tag.de) for
 Windows, built with Kotlin, Jetpack Compose, and **Material 3 Expressive**.
 
-- Current release: **v0.3.1** (`versionCode = 5`)
+- Current release: **v0.3.2** (`versionCode = 6`)
 - Minimum Android version: **12 (API 31)**
 - Uses the **All files access** permission (`MANAGE_EXTERNAL_STORAGE`) so it can browse any folder
   and rewrite files in place — sideload only, not for Play Store distribution.
 
-## Current status — v0.3.1
+## Current status — v0.3.2
 
 | Feature | State |
 |---|---|
+| **Theme section: Screen mode (`Auto`, `Dark`, `Light`) + Design language (`Material 3 Expressive`, `Material You`, `Liquid Glass`, `Halo`)** | ✅ v0.3.2 |
 | **Home workspace in Grid style (`Tag editor`, `File manager`, `Automate`, `Settings`)** | ✅ v0.3.1 |
 | **Full File Manager (copy, move/cut, paste, rename, delete, new folder, sort, hidden files, properties, open in Tag Editor)** | ✅ v0.3.0 |
 | **Automate workspace section (placeholder ready for automation rules)** | ✅ v0.3.0 |
@@ -64,7 +65,7 @@ Pushing to `master` runs a GitHub Action that builds the versioned APK (`mp3tag-
 and publishes/updates the corresponding versioned GitHub Release (`v<versionName>`, marked as **Latest**):
 
 - Latest release page: `https://github.com/areyouanand/mp3tag-mobile/releases/latest`
-- Current release (`v0.3.1`): `https://github.com/areyouanand/mp3tag-mobile/releases/tag/v0.3.1`
+- Current release (`v0.3.2`): `https://github.com/areyouanand/mp3tag-mobile/releases/tag/v0.3.2`
 
 All builds — local and CI — sign with the committed shared debug keystore, so CI-built APKs install
 over previously installed versions without uninstalling.
@@ -76,7 +77,7 @@ over previously installed versions without uninstalling.
    - **Tag editor**: Browse folders across Internal storage, SD card, and USB OTG. Tap audio files or folder checkboxes to multi-select (and tap **Edit**), or long-press any file or folder to edit its tags immediately.
    - **File manager**: Full storage file manager with breadcrumb path bar, search, Copy, Move (Cut), Paste, Rename, Delete, New Folder, Sort (Name, Date, Size, Type; Ascending/Descending), Show/Hide `.dot` hidden files, Properties/Details, and one-tap **Edit tags** when audio files are selected.
    - **Automate**: Workspace section reserved for upcoming automated tagging and file workflows.
-   - **Settings**: Configure MP3/DSF ID3v2 version (`v2.3` vs `v2.4`), Theme (`System`, `Light`, `Dark`), and Device & performance mode (`Auto`, `High performance`, `Low-spec / memory saver`).
+   - **Settings**: Configure Theme (**Screen mode**: `Auto`, `Dark`, `Light`; **Design language**: `Material 3 Expressive`, `Material You`, `Liquid Glass`, `Halo`), MP3/DSF ID3v2 version (`v2.3` vs `v2.4`), and Device & performance mode (`Auto`, `High performance`, `Low-spec / memory saver`).
 
 ## Project layout
 

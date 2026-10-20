@@ -30,16 +30,30 @@ fun SectionHeader(text: String, modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun RadioRow(label: String, selected: Boolean, onClick: () -> Unit) {
+fun RadioRow(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    subtitle: String? = null,
+) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
             .selectable(selected = selected, onClick = onClick)
-            .padding(vertical = 2.dp),
+            .padding(vertical = if (subtitle != null) 4.dp else 2.dp),
     ) {
         RadioButton(selected = selected, onClick = null)
-        Text(label, style = MaterialTheme.typography.bodyLarge)
+        Column(modifier = Modifier.padding(start = 4.dp)) {
+            Text(label, style = MaterialTheme.typography.bodyLarge)
+            if (subtitle != null) {
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
     }
 }
 
