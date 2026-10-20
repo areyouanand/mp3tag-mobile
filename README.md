@@ -121,3 +121,14 @@ app/src/main/java/com/mp3tag/mobile/
 
 Tag engine: [JAudioTagger 3.0.1](https://www.jthink.net/jaudiotagger/) + custom binary handlers for
 DSDIFF (`.dff`), Ogg Opus (`.opus`), Monkey's Audio (`.ape`), and WavPack (`.wv`).
+
+## License
+
+This project is **open source** under the [MIT License](LICENSE) — **free to use, modify, and fork**,
+including for your own builds.
+
+The "Mp3tag" name refers to [Mp3tag for Windows](https://www.mp3tag.de) by Florian Heidenreich and is
+used only to describe this project's inspiration. MP3Tag Mobile is an **unofficial fan build** — not
+affiliated with, sponsored by, or endorsed by the original Mp3tag, and containing no code or assets
+from it. Forks are welcome under MIT, but should not imply endorsement by the original Mp3tag or its
+author.
