@@ -23,6 +23,7 @@ Single user, sideloaded, never going to the Play Store.
 3. **Local tagging only, for now** — MusicBrainz/Discogs lookup is Phase 3, not sooner (user chose this).
 4. All pickers/menus are **ModalBottomSheets** — NOT DropdownMenu (broken on the device; see gotchas).
 5. Editing follows MP3Tag semantics, implemented as a **per-file cached-edit model** (see below).
+6. **Home Workspace Grid is the app entry point** — launches into 4 grid tiles (`Tag editor`, `File manager`, `Automate`, `Settings`). Only the grid tile for `Settings` is shown on the Home page (no duplicate top-bar gear icon).
 
 ## Current state (v0.3.1 — everything below is verified working on the device)
 
@@ -156,8 +157,9 @@ mixed-cover detection. Section sits at the bottom of the editor (user requested)
 - Update `HANDOFF.md` + `README.md` status tables at the end of any session; commit + push
   (message per logical change). Every push green-lights CI automatically.
 - Feature work lives in `app/src/main/java/com/mp3tag/mobile/`:
-  - `MainActivity.kt` — activity, AppViewModel (nav: Browser/Settings/Editor, permission, theme)
-  - `data/fs/` folder scanner · `data/prefs/AppPrefs.kt` settings/recents/patterns
+  - `MainActivity.kt` — activity, AppViewModel (nav: `Home` / `Browser` (Tag editor) / `FileManager` / `Automate` / `Settings(returnTo)` / `Editor(paths, session, returnTo)`, permission, theme, performance mode)
+  - `data/fs/FolderScanner.kt` — natural sorting, directory listing, recursive audio file collection (`collectAudioFilesRecursively`)
+  - `data/prefs/AppPrefs.kt` — settings, recent folders, last folders (`lastFolder` + `lastFileManagerFolder`), `showHiddenFiles`, saved patterns
   - `data/tag/TagData.kt` + `TagEngine.kt` — models + JAudioTagger engine
   - `ui/home/` (`HomeScreen`), `ui/filemanager/` (`FileManagerScreen`, `FileManagerViewModel`),
     `ui/automate/` (`AutomateScreen`), `ui/browser/`, `ui/editor/` (`EditorScreen`, `EditorViewModel`,
@@ -168,6 +170,7 @@ mixed-cover detection. Section sits at the bottom of the editor (user requested)
 
 ## Roadmap
 
+- **Automate workspace**: user requested the `Automate` section on the Home grid as a placeholder to be populated with automated tagging/file workflows in a future session.
 - **Phase 2 remaining**: tag export/import (CSV) — export selected/folder's tags via SAF
   CreateDocument, import by filename match. Possibly free-form custom fields
   (TXXX / Vorbis freeform / MP4 `----:` atoms) beyond the standard catalog.
