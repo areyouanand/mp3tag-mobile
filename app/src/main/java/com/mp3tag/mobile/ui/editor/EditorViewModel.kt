@@ -3,7 +3,6 @@ package com.mp3tag.mobile.ui.editor
 import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
-import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
@@ -18,16 +17,24 @@ import com.mp3tag.mobile.data.tag.TagSnapshot
 import com.mp3tag.mobile.data.tag.WriteOptions
 import com.mp3tag.mobile.data.tag.WriteRequest
 import com.mp3tag.mobile.data.tag.sniffImageMime
+import com.mp3tag.mobile.util.DeviceProfile
+import com.mp3tag.mobile.util.ImageDecode
 import com.mp3tag.mobile.util.PatternParser
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import org.jaudiotagger.tag.FieldKey
 import java.io.File
+import java.util.concurrent.atomic.AtomicInteger
 
 /** Editor state of one field, mirroring MP3Tag's batch behaviour. */
 data class FieldUi(
@@ -46,6 +53,7 @@ data class RenameOutcome(val oldPath: String, val newPath: String?, val error: S
 data class EditorState(
     val paths: List<String> = emptyList(),
     val loading: Boolean = true,
+    val progressText: String? = null,
     val snapshots: List<TagSnapshot> = emptyList(),
     val fields: Map<FieldKey, FieldUi> = emptyMap(),
     val extraKeys: List<FieldKey> = emptyList(),
@@ -113,10 +121,21 @@ class EditorViewModel(
 
     fun reload(hardReset: Boolean = false) {
         viewModelScope.launch {
-            _state.update { it.copy(loading = true) }
-            val snapshots = readAll(_state.value.paths)
+            val total = _state.value.paths.size
+            _state.update {
+                it.copy(
+                    loading = true,
+                    progressText = if (total > 1) "Reading 0 / $total files…" else null,
+                )
+            }
+            val snapshots = readAll(_state.value.paths) { done, count ->
+                if (count > 1) {
+                    _state.update { it.copy(progressText = "Reading $done / $count files…") }
+                }
+            }
             _state.update { current ->
                 var updated = current.buildFrom(snapshots, current.extraKeys)
+                    .copy(progressText = null)
                 if (hardReset) {
                     updated = updated.copy(
                         perFileOverrides = emptyMap(),   // keyed by pre-rename paths — stale
@@ -165,7 +184,7 @@ class EditorViewModel(
         val targets = current.includedSnapshots
         if (targets.isEmpty()) return
         viewModelScope.launch {
-            _state.update { it.copy(saving = true) }
+            _state.update { it.copy(saving = true, progressText = "Renaming ${targets.size} file(s)…") }
             val outcomes = withContext(Dispatchers.IO) {
                 performRenames(targets, pattern)
             }
@@ -173,6 +192,7 @@ class EditorViewModel(
                 val renamedOldPaths = outcomes.map { it.oldPath }.toSet()
                 it.copy(
                     saving = false,
+                    progressText = null,
                     renameOutcomes = outcomes,
                     paths = outcomes.map { o -> o.newPath ?: o.oldPath } +
                         current.snapshots.filter { s -> s.path !in renamedOldPaths }.map { s -> s.path },
@@ -248,13 +268,20 @@ class EditorViewModel(
 
     fun onCoverPicked(uri: Uri) {
         val context = getApplication<Application>()
+        val profile = DeviceProfile.get(context, prefs.performanceMode)
         viewModelScope.launch {
             val cover = withContext(Dispatchers.IO) {
                 runCatching {
-                    val bytes = context.contentResolver.openInputStream(uri)
+                    val rawBytes = context.contentResolver.openInputStream(uri)
                         ?.use { stream -> stream.readBytes() }
                         ?: return@runCatching null
-                    CoverImage(bytes, sniffImageMime(bytes))
+                    val rawMime = sniffImageMime(rawBytes)
+                    val (normBytes, normMime) = ImageDecode.normalizeImportedCover(
+                        bytes = rawBytes,
+                        mimeType = rawMime,
+                        maxDimensionPx = profile.maxImportedCoverPx,
+                    )
+                    CoverImage(normBytes, normMime)
                 }.getOrNull()
             }
             if (cover != null) {
@@ -278,6 +305,7 @@ class EditorViewModel(
             else -> CoverAction.NONE
         }
         val options = WriteOptions(id3Version = prefs.id3Version)
+        val profile = DeviceProfile.get(getApplication(), prefs.performanceMode)
 
         fun fieldValuesFor(path: String): Map<FieldKey, String?> = buildMap {
             current.perFileOverrides.forEach { (key, byPath) ->
@@ -288,24 +316,44 @@ class EditorViewModel(
         }
 
         viewModelScope.launch {
-            _state.update { it.copy(saving = true, outcomes = null) }
             val targets = current.snapshots.filter { it.path !in current.excludedPaths }
+            val total = targets.size
+            _state.update {
+                it.copy(
+                    saving = true,
+                    outcomes = null,
+                    progressText = if (total > 1) "Saving 0 / $total files…" else "Saving…",
+                )
+            }
             val outcomes = withContext(Dispatchers.IO) {
-                targets.map { snapshot ->
-                    runCatching {
-                        TagEngine.write(
-                            file = File(snapshot.path),
-                            request = WriteRequest(
-                                fieldValues = fieldValuesFor(snapshot.path),
-                                coverAction = coverAction,
-                                newCover = current.pendingCover,
-                            ),
-                            options = options,
-                        )
-                    }.fold(
-                        onSuccess = { SaveOutcome(File(snapshot.path), success = true, message = null) },
-                        onFailure = { SaveOutcome(File(snapshot.path), success = false, it.message) },
-                    )
+                val sem = Semaphore(profile.ioParallelism.coerceAtMost(4))
+                val doneCount = AtomicInteger(0)
+                coroutineScope {
+                    targets.map { snapshot ->
+                        async {
+                            sem.withPermit {
+                                val res = runCatching {
+                                    TagEngine.write(
+                                        file = File(snapshot.path),
+                                        request = WriteRequest(
+                                            fieldValues = fieldValuesFor(snapshot.path),
+                                            coverAction = coverAction,
+                                            newCover = current.pendingCover,
+                                        ),
+                                        options = options,
+                                    )
+                                }.fold(
+                                    onSuccess = { SaveOutcome(File(snapshot.path), success = true, message = null) },
+                                    onFailure = { SaveOutcome(File(snapshot.path), success = false, it.message) },
+                                )
+                                val done = doneCount.incrementAndGet()
+                                if (total > 1) {
+                                    _state.update { it.copy(progressText = "Saving $done / $total files…") }
+                                }
+                                res
+                            }
+                        }
+                    }.awaitAll()
                 }
             }
             // Written files are done; files not written (excluded) keep their cached edits.
@@ -318,6 +366,7 @@ class EditorViewModel(
             _state.update {
                 it.buildFrom(snapshots, it.extraKeys, keptOverrides).copy(
                     saving = false,
+                    progressText = null,
                     outcomes = outcomes,
                     pendingCover = null,
                     coverRemoveRequested = false,
@@ -328,9 +377,63 @@ class EditorViewModel(
 
     fun dismissOutcomes() = _state.update { it.copy(outcomes = null) }
 
-    private suspend fun readAll(paths: List<String>): List<TagSnapshot> = withContext(Dispatchers.IO) {
-        paths.mapNotNull { path ->
-            runCatching { TagEngine.read(File(path)) }.getOrNull()
+    /**
+     * Reads all [paths] on [Dispatchers.IO] with hardware-scaled bounded parallelism
+     * and deduplicates identical embedded cover art across files so large album batches
+     * do not multiply cover byte arrays in heap on low-RAM phones.
+     */
+    private suspend fun readAll(
+        paths: List<String>,
+        onProgress: ((done: Int, total: Int) -> Unit)? = null,
+    ): List<TagSnapshot> = withContext(Dispatchers.IO) {
+        val profile = DeviceProfile.get(getApplication(), prefs.performanceMode)
+        val sem = Semaphore(profile.ioParallelism)
+        val total = paths.size
+        val doneCount = AtomicInteger(0)
+
+        val uniqueCovers = HashMap<CoverImage, CoverImage>()
+        var retainedCoverBytes = 0L
+        val coverLock = Any()
+
+        coroutineScope {
+            paths.map { path ->
+                async {
+                    sem.withPermit {
+                        val raw = runCatching { TagEngine.read(File(path)) }.getOrNull()
+                        val deduped = if (raw?.cover != null) {
+                            val c = raw.cover
+                            val canonical = synchronized(coverLock) {
+                                val existing = uniqueCovers[c]
+                                if (existing != null) {
+                                    existing
+                                } else if (retainedCoverBytes + c.bytes.size <= profile.maxRetainedCoverBytes) {
+                                    uniqueCovers[c] = c
+                                    retainedCoverBytes += c.bytes.size
+                                    c
+                                } else {
+                                    // Low-RAM safeguard when many distinct huge covers are loaded at once:
+                                    // downscale the preview bytes so we never trigger OutOfMemoryError.
+                                    val (smallBytes, smallMime) = ImageDecode.normalizeImportedCover(
+                                        bytes = c.bytes,
+                                        mimeType = c.mimeType,
+                                        maxDimensionPx = profile.thumbnailMaxPx,
+                                    )
+                                    val compact = CoverImage(smallBytes, smallMime)
+                                    uniqueCovers[c] = compact
+                                    retainedCoverBytes += compact.bytes.size
+                                    compact
+                                }
+                            }
+                            raw.copy(cover = canonical)
+                        } else {
+                            raw
+                        }
+                        val done = doneCount.incrementAndGet()
+                        onProgress?.invoke(done, total)
+                        deduped
+                    }
+                }
+            }.awaitAll().filterNotNull()
         }
     }
 
@@ -346,8 +449,9 @@ class EditorViewModel(
         perFileOverrides: Map<FieldKey, Map<String, String>> = this.perFileOverrides,
         excludedPaths: Set<String> = this.excludedPaths,
     ): EditorState {
+        val cleanExtra = extraKeys.filter { it !in EDITABLE_FIELDS }
         val included = snapshots.filter { it.path !in excludedPaths }
-        val displayed = EDITABLE_FIELDS + extraKeys.filter { it !in EDITABLE_FIELDS }
+        val displayed = EDITABLE_FIELDS + cleanExtra
         fun effectiveValue(snap: TagSnapshot, key: FieldKey): String =
             perFileOverrides[key]?.get(snap.path) ?: snap.fields[key].orEmpty()
 
@@ -363,6 +467,25 @@ class EditorViewModel(
                 cleared = edited && effective.size == 1 && effective[0].isEmpty(),
             )
         }
+
+        // Fast path: when only perFileOverrides changed (e.g. typing in a text field),
+        // availableKeys, valueOptions, cover, and coverMixed are invariant because they
+        // depend solely on `included` and `displayed`.
+        val canReuseSnapshotDerived =
+            !this.loading &&
+                this.snapshots === snapshots &&
+                this.excludedPaths == excludedPaths &&
+                this.extraKeys == cleanExtra &&
+                this.fields.isNotEmpty()
+
+        if (canReuseSnapshotDerived) {
+            return copy(
+                loading = false,
+                fields = fields,
+                perFileOverrides = perFileOverrides,
+            )
+        }
+
         // Fields present in the files but not currently displayed, MP3Tag-style.
         val available = included.flatMap { it.fields.keys }
             .distinct()
@@ -378,7 +501,7 @@ class EditorViewModel(
             excludedPaths = excludedPaths,
             fields = fields,
             perFileOverrides = perFileOverrides,
-            extraKeys = extraKeys.filter { it !in EDITABLE_FIELDS },
+            extraKeys = cleanExtra,
             availableKeys = available,
             valueOptions = displayed.associateWith { key ->
                 included.map { it.fields[key].orEmpty() }

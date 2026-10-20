@@ -13,7 +13,7 @@ Single user, sideloaded, never going to the Play Store.
 - minSdk 31 (Android 12), target/compile SDK 36, AGP 8.13.2, Kotlin 2.4.21, Gradle 8.14.4 (wrapper)
 - Tag engine: **JAudioTagger 3.0.1** (pure Java): MP3 (ID3v1 preserved; v2.3/v2.4 selectable),
   FLAC, M4A/MP4, Ogg Vorbis, **WAV (ID3 + RIFF INFO chunks)**, **DSF (DSD, embedded ID3v2)**
-- versionName 0.2.1 / versionCode 2 (two debug builds so far: v0.1.0 phase 1, v0.2.1 phase 2)
+- versionName 0.2.2 / versionCode 3 (v0.1.0 phase 1, v0.2.1 phase 2, v0.2.2 adaptive UI + hardware scaling)
 
 ## Locked-in product decisions (do not silently change)
 
@@ -24,7 +24,20 @@ Single user, sideloaded, never going to the Play Store.
 4. All pickers/menus are **ModalBottomSheets** — NOT DropdownMenu (broken on the device; see gotchas).
 5. Editing follows MP3Tag semantics, implemented as a **per-file cached-edit model** (see below).
 
-## Current state (v0.2.1 — everything below is verified working on the device)
+## Current state (v0.2.2 — everything below is verified working on the device)
+
+**Adaptive Form Factors & Orientations** (`ui/common/AdaptiveLayout.kt`):
+- **Phone Portrait (`< 600dp` width)**: single-column layouts with `ModalBottomSheet` menus/pickers and bottom selection bar.
+- **Phone Landscape & Tablets (`>= 600dp` width)**: 2-pane split layouts across Browser, Editor, Settings, and Tools dialogs:
+  - **Browser**: left sidebar holds filter, active selection card (`Edit`/`Clear`), storage volumes, and recent folders; right pane gets 100% height for the file list (and a 2-column grid on large tablets `>= 960dp`).
+  - **Editor**: left pane holds file info, cover art, file-inclusion card, and Save button; right pane arranges tag fields in a 2-column grid with `imePadding()`.
+  - **Tools dialogs**: side-by-side controls + live preview in landscape/tablet; `rememberSaveable` across all screens/dialogs so rotation never loses typed filters, patterns, or open sheets.
+
+**High-End vs. Low-Spec Hardware Scaling** (`util/DeviceProfile.kt` + Settings override):
+- Auto-detects `LOW_SPEC`, `STANDARD`, or `HIGH_END` from RAM, heap class, `isLowRamDevice`, and CPU cores (overridable in Settings → Device & performance).
+- **High-end**: bounded parallel tag reading (`4..8` coroutines), `768px` `ARGB_8888` cover thumbnails, larger bitmap `LruCache`.
+- **Low-spec**: conservative I/O concurrency (`2`), `256px` `RGB_565` thumbnails (4× less bitmap RAM), OOM-safe fallback decoding, automatic downscaling of oversized imported photos, and `onTrimMemory` cache eviction.
+- **All tiers**: O(1) cached hash + batch `CoverImage` deduplication across tracks in a folder (e.g. 30 tracks sharing a 5 MB album cover use 5 MB heap instead of 150 MB), off-main-thread thumbnail decoding, precomputed file sizes in `FolderScanner` (zero `stat()` syscalls during scroll), and fast-path `buildFrom()` on keystrokes.
 
 **Browser**: start at last-visited folder (persists), storage-volume chips (Internal storage / SD
 card) + "Choose storage…" sheet (USB-OTG included automatically), natural numeric sort, name
@@ -132,8 +145,8 @@ mixed-cover detection. Section sits at the bottom of the editor (user requested)
   - `data/fs/` folder scanner · `data/prefs/AppPrefs.kt` settings/recents/patterns
   - `data/tag/TagData.kt` + `TagEngine.kt` — models + JAudioTagger engine
   - `ui/browser/`, `ui/editor/` (EditorScreen, EditorViewModel, ToolsDialogs), `ui/settings/`,
-    `ui/common/Common.kt`, `ui/theme/Theme.kt` (M3 Expressive), `util/` (Format, ImageDecode,
-    PatternParser)
+    `ui/common/` (`Common.kt`, `AdaptiveLayout.kt`), `ui/theme/Theme.kt` (M3 Expressive),
+    `util/` (`DeviceProfile.kt`, `Format.kt` + `ImageDecode`, `PatternParser.kt`)
 - No tests exist yet; verification = build green + install on device + uiautomator checks.
 
 ## Roadmap

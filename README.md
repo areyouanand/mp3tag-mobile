@@ -22,6 +22,8 @@ Windows, built with Kotlin, Jetpack Compose and **Material 3 Expressive**.
 | **Tools: rename from tags** (preview, sanitized names, collision handling) | ✅ Phase 2 |
 | **Tools: batch actions** (regex replace, case conversion) | ✅ Phase 2 |
 | Cover art: view, embed/replace from photo picker, remove | ✅ |
+| **Adaptive layouts: phone & tablet, portrait & landscape (2-pane split view, 2-column grid)** | ✅ v0.2.2 |
+| **Hardware-tier scaling: high-end parallel I/O & low-spec memory/RGB_565 saver** | ✅ v0.2.2 |
 | MP3: ID3v2.3 / ID3v2.4 writing (configurable), ID3v1 preserved | ✅ |
 | WAV: RIFF INFO + ID3 chunks (MP3Tag-style both) | ✅ |
 | DSD: DSF files tagged through their embedded ID3v2 tag | ✅ |

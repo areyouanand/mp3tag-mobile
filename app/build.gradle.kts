@@ -12,8 +12,8 @@ android {
         applicationId = "com.mp3tag.mobile"
         minSdk = 31          // Android 12
         targetSdk = 36
-        versionCode = 2
-        versionName = "0.2.1"
+        versionCode = 3
+        versionName = "0.2.2"
     }
 
     // Shared debug keystore so local and CI builds are inter-installable

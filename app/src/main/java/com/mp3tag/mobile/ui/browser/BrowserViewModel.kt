@@ -29,6 +29,7 @@ data class BrowserState(
     val directory: File = Environment.getExternalStorageDirectory(),
     val directories: List<File> = emptyList(),
     val audioFiles: List<File> = emptyList(),
+    val fileSubtitles: Map<String, String> = emptyMap(),
     val selectedPaths: Set<String> = emptySet(),
     val loading: Boolean = false,
     val error: String? = null,
@@ -76,10 +77,16 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                         error = result.exceptionOrNull()?.message ?: "Could not read folder",
                     )
                 } else {
-                    val (dirs, files) = result.getOrThrow()
+                    val (dirs, files, subtitles) = result.getOrThrow()
                     if (remember) rememberRecent(directory)
                     prefs.lastFolder = directory.absolutePath
-                    current.copy(loading = false, error = null, directories = dirs, audioFiles = files)
+                    current.copy(
+                        loading = false,
+                        error = null,
+                        directories = dirs,
+                        audioFiles = files,
+                        fileSubtitles = subtitles,
+                    )
                 }
             }
         }

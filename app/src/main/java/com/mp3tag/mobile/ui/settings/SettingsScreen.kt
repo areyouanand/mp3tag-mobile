@@ -1,11 +1,22 @@
 package com.mp3tag.mobile.ui.settings
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -18,12 +29,18 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.mp3tag.mobile.data.prefs.Id3Version
+import com.mp3tag.mobile.data.prefs.PerformanceMode
 import com.mp3tag.mobile.data.prefs.ThemeMode
 import com.mp3tag.mobile.ui.common.RadioRow
 import com.mp3tag.mobile.ui.common.SectionHeader
+import com.mp3tag.mobile.ui.common.rememberAdaptiveWindowInfo
+import com.mp3tag.mobile.util.DeviceProfile
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -32,8 +49,16 @@ fun SettingsScreen(
     onId3VersionChange: (Id3Version) -> Unit,
     themeMode: ThemeMode,
     onThemeChange: (ThemeMode) -> Unit,
+    performanceMode: PerformanceMode = PerformanceMode.AUTO,
+    onPerformanceModeChange: (PerformanceMode) -> Unit = {},
     onBack: () -> Unit,
 ) {
+    val context = LocalContext.current
+    val windowInfo = rememberAdaptiveWindowInfo()
+    val capabilities = remember(context, performanceMode) {
+        DeviceProfile.get(context, performanceMode)
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -46,76 +71,173 @@ fun SettingsScreen(
             )
         },
     ) { padding ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = 16.dp),
+        Box(
+            contentAlignment = Alignment.TopCenter,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal)),
         ) {
-            item {
-                Spacer(Modifier.height(padding.calculateTopPadding()))
-            }
-
-            item {
-                SectionHeader("MP3 & DSD (DSF) tag version")
-                Column {
-                    Id3Version.entries.forEach { version ->
-                        RadioRow(
-                            label = version.label,
-                            selected = id3Version == version,
-                            onClick = { onId3VersionChange(version) },
+            LazyColumn(
+                modifier = Modifier
+                    .widthIn(max = 960.dp)
+                    .fillMaxSize(),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+            ) {
+                if (windowInfo.useTwoPane) {
+                    item {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(24.dp),
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                TagSettingsBlock(
+                                    id3Version = id3Version,
+                                    onId3VersionChange = onId3VersionChange,
+                                )
+                                ThemeSettingsBlock(
+                                    themeMode = themeMode,
+                                    onThemeChange = onThemeChange,
+                                )
+                            }
+                            Column(Modifier.weight(1f)) {
+                                PerformanceSettingsBlock(
+                                    performanceMode = performanceMode,
+                                    onPerformanceModeChange = onPerformanceModeChange,
+                                    capabilitiesText = "Detected: ${capabilities.detectedTier.label} • " +
+                                        "${capabilities.cpuCores} cores, ~${capabilities.totalRamMb} MB RAM " +
+                                        "(active: ${capabilities.ioParallelism} I/O threads, " +
+                                        "${capabilities.thumbnailMaxPx}px thumbnails)",
+                                )
+                                AboutSettingsBlock()
+                            }
+                        }
+                    }
+                } else {
+                    item {
+                        TagSettingsBlock(
+                            id3Version = id3Version,
+                            onId3VersionChange = onId3VersionChange,
                         )
                     }
-                }
-                Text(
-                    text = "Applies when saving MP3 and DSF (DSD) files.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(start = 4.dp, top = 4.dp),
-                )
-            }
-
-            item {
-                SectionHeader("WAV tags")
-                Text(
-                    text = "WAV files are written with both an ID3v2 chunk and a RIFF INFO chunk, " +
-                        "like MP3Tag's default.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(start = 4.dp, top = 4.dp),
-                )
-            }
-
-            item {
-                SectionHeader("Theme")
-                Column {
-                    ThemeMode.entries.forEach { mode ->
-                        RadioRow(
-                            label = mode.label,
-                            selected = themeMode == mode,
-                            onClick = { onThemeChange(mode) },
+                    item {
+                        ThemeSettingsBlock(
+                            themeMode = themeMode,
+                            onThemeChange = onThemeChange,
                         )
                     }
-                }
-            }
-
-            item {
-                SectionHeader("About")
-                Card(Modifier.padding(vertical = 4.dp)) {
-                    Column(Modifier.padding(16.dp)) {
-                        Text("MP3Tag Mobile 0.1.0", style = MaterialTheme.typography.titleMedium)
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            text = "Personal-use tag editor inspired by MP3Tag for Windows.\n\n" +
-                                "Supported now: MP3 (ID3v1/v2.3/v2.4), FLAC, M4A/MP4, Ogg, " +
-                                "WAV (RIFF INFO + ID3), DSF (DSD).\n\n" +
-                                "Roadmap: tags from filename, rename from tags, batch actions " +
-                                "(regex, case), DFF (DSDIFF) via TagLib, Opus/WMA/APE, " +
-                                "MusicBrainz & Discogs lookup, export/import.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    item {
+                        PerformanceSettingsBlock(
+                            performanceMode = performanceMode,
+                            onPerformanceModeChange = onPerformanceModeChange,
+                            capabilitiesText = "Detected: ${capabilities.detectedTier.label} • " +
+                                "${capabilities.cpuCores} cores, ~${capabilities.totalRamMb} MB RAM " +
+                                "(active: ${capabilities.ioParallelism} I/O threads, " +
+                                "${capabilities.thumbnailMaxPx}px thumbnails)",
                         )
                     }
+                    item {
+                        AboutSettingsBlock()
+                    }
+                }
+                item {
+                    Spacer(Modifier.navigationBarsPadding().height(16.dp))
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun TagSettingsBlock(
+    id3Version: Id3Version,
+    onId3VersionChange: (Id3Version) -> Unit,
+) {
+    SectionHeader("MP3 & DSD (DSF) tag version")
+    Column {
+        Id3Version.entries.forEach { version ->
+            RadioRow(
+                label = version.label,
+                selected = id3Version == version,
+                onClick = { onId3VersionChange(version) },
+            )
+        }
+    }
+    Text(
+        text = "Applies when saving MP3 and DSF (DSD) files.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 4.dp, top = 4.dp),
+    )
+
+    SectionHeader("WAV tags")
+    Text(
+        text = "WAV files are written with both an ID3v2 chunk and a RIFF INFO chunk, " +
+            "like MP3Tag's default.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 4.dp, top = 4.dp),
+    )
+}
+
+@Composable
+private fun ThemeSettingsBlock(
+    themeMode: ThemeMode,
+    onThemeChange: (ThemeMode) -> Unit,
+) {
+    SectionHeader("Theme")
+    Column {
+        ThemeMode.entries.forEach { mode ->
+            RadioRow(
+                label = mode.label,
+                selected = themeMode == mode,
+                onClick = { onThemeChange(mode) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun PerformanceSettingsBlock(
+    performanceMode: PerformanceMode,
+    onPerformanceModeChange: (PerformanceMode) -> Unit,
+    capabilitiesText: String,
+) {
+    SectionHeader("Device & performance")
+    Column {
+        PerformanceMode.entries.forEach { mode ->
+            RadioRow(
+                label = mode.label,
+                selected = performanceMode == mode,
+                onClick = { onPerformanceModeChange(mode) },
+            )
+        }
+    }
+    Text(
+        text = capabilitiesText,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 4.dp, top = 4.dp),
+    )
+}
+
+@Composable
+private fun AboutSettingsBlock() {
+    SectionHeader("About")
+    Card(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        Column(Modifier.padding(16.dp)) {
+            Text("MP3Tag Mobile 0.2.2", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = "Personal-use tag editor inspired by MP3Tag for Windows.\n\n" +
+                    "Supported now: MP3 (ID3v1/v2.3/v2.4), FLAC, M4A/MP4, Ogg, " +
+                    "WAV (RIFF INFO + ID3), DSF (DSD), tags from filename, rename from tags, " +
+                    "batch regex & case transforms, adaptive phone/tablet layouts.\n\n" +
+                    "Roadmap: CSV tag export/import, DFF (DSDIFF) via TagLib, Opus/WMA/APE, " +
+                    "MusicBrainz & Discogs lookup.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

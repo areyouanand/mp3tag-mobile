@@ -1,5 +1,6 @@
 package com.mp3tag.mobile.data.fs
 
+import com.mp3tag.mobile.util.Format
 import java.io.File
 
 /** Folder listing filtered to what a tag editor cares about. */
@@ -8,47 +9,91 @@ object FolderScanner {
     val AUDIO_EXTENSIONS = setOf("mp3", "flac", "m4a", "mp4", "ogg", "oga", "wav", "dsf")
 
     fun isAudioFile(file: File): Boolean =
-        file.isFile && file.extension.lowercase() in AUDIO_EXTENSIONS
+        file.extension.lowercase() in AUDIO_EXTENSIONS && file.isFile
 
-    data class Listing(val directories: List<File>, val audioFiles: List<File>)
+    data class Listing(
+        val directories: List<File>,
+        val audioFiles: List<File>,
+        /** Precomputed "size • EXT" per file path so UI scrolling never performs stat() syscalls. */
+        val fileSubtitles: Map<String, String> = emptyMap(),
+    )
 
     fun list(dir: File): Listing {
         val entries = dir.listFiles()
-            ?: return Listing(emptyList(), emptyList())
+            ?: return Listing(emptyList(), emptyList(), emptyMap())
 
-        val directories = entries
-            .filter { it.isDirectory && !it.name.startsWith(".") }
-            .sortedWith(compareBy { it.name.lowercase() })
+        val dirs = ArrayList<File>()
+        val files = ArrayList<File>()
 
-        val audioFiles = entries
-            .filter { isAudioFile(it) }
-            .sortedWith(compareBy(naturalComparator()) { it.name })
+        for (entry in entries) {
+            val name = entry.name
+            if (name.startsWith(".")) continue
+            val dot = name.lastIndexOf('.')
+            val extLower = if (dot > 0 && dot < name.length - 1) {
+                name.substring(dot + 1).lowercase()
+            } else {
+                ""
+            }
+            if (extLower in AUDIO_EXTENSIONS && entry.isFile) {
+                files.add(entry)
+            } else if (entry.isDirectory) {
+                dirs.add(entry)
+            }
+        }
 
-        return Listing(directories, audioFiles)
+        val natCmp = naturalComparator()
+        dirs.sortWith { a, b -> natCmp.compare(a.name, b.name) }
+        files.sortWith { a, b -> natCmp.compare(a.name, b.name) }
+
+        val subtitles = HashMap<String, String>(files.size * 2)
+        for (file in files) {
+            val ext = file.extension.uppercase()
+            subtitles[file.absolutePath] = "${Format.fileSize(file.length())} • $ext"
+        }
+
+        return Listing(dirs, files, subtitles)
     }
 
     /** Numeric-aware ("natural") file-name ordering, like MP3Tag's file list. */
     fun naturalComparator(): Comparator<String> = Comparator { a, b -> compareNatural(a, b) }
 
+    /**
+     * Allocation-free natural string comparator (safe for sorting thousands of files
+     * on low-spec devices without GC pressure).
+     */
     fun compareNatural(a: String, b: String): Int {
         var ia = 0
         var ib = 0
-        while (ia < a.length && ib < b.length) {
+        val lenA = a.length
+        val lenB = b.length
+        while (ia < lenA && ib < lenB) {
             val ca = a[ia]
             val cb = b[ib]
             if (ca.isDigit() && cb.isDigit()) {
                 var ja = ia
-                while (ja < a.length && a[ja].isDigit()) ja++
+                while (ja < lenA && a[ja].isDigit()) ja++
                 var jb = ib
-                while (jb < b.length && b[jb].isDigit()) jb++
-                val na = a.substring(ia, ja).trimStart('0')
-                val nb = b.substring(ib, jb).trimStart('0')
-                val cmp = if (na.length != nb.length) {
-                    na.length.compareTo(nb.length)
-                } else {
-                    na.compareTo(nb)
+                while (jb < lenB && b[jb].isDigit()) jb++
+
+                var za = ia
+                while (za < ja && a[za] == '0') za++
+                var zb = ib
+                while (zb < jb && b[zb] == '0') zb++
+
+                val sigLenA = ja - za
+                val sigLenB = jb - zb
+                if (sigLenA != sigLenB) {
+                    return sigLenA.compareTo(sigLenB)
                 }
-                if (cmp != 0) return cmp
+                for (k in 0 until sigLenA) {
+                    val da = a[za + k]
+                    val db = b[zb + k]
+                    if (da != db) return da.compareTo(db)
+                }
+                // Tie-breaker on leading zeros if numeric values are equal (e.g. "01" vs "1")
+                val runDiff = (ja - ia).compareTo(jb - ib)
+                if (runDiff != 0) return runDiff
+
                 ia = ja
                 ib = jb
             } else {
@@ -58,6 +103,6 @@ object FolderScanner {
                 ib++
             }
         }
-        return (a.length - ia).compareTo(b.length - ib)
+        return (lenA - ia).compareTo(lenB - ib)
     }
 }

@@ -12,17 +12,26 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -30,11 +39,12 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DriveFileRenameOutline
 import androidx.compose.material.icons.filled.ErrorOutline
@@ -46,12 +56,10 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
@@ -66,11 +74,14 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -80,13 +91,19 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.mp3tag.mobile.data.prefs.AppPrefs
 import com.mp3tag.mobile.data.tag.CoverImage
 import com.mp3tag.mobile.data.tag.OFFERABLE_FIELDS
 import com.mp3tag.mobile.data.tag.TagSnapshot
+import com.mp3tag.mobile.ui.common.rememberAdaptiveWindowInfo
+import com.mp3tag.mobile.util.DeviceProfile
 import com.mp3tag.mobile.util.Format
 import com.mp3tag.mobile.util.ImageDecode
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.jaudiotagger.tag.FieldKey
 import java.io.File
 
@@ -196,6 +213,11 @@ private val NUMERIC_FIELDS = setOf(
  * Tag editor for one or more selected files. Batch semantics follow MP3Tag:
  * fields that differ across the selection show as "mixed" and are only
  * written when the user edits them.
+ *
+ * Adapts across form factors and orientations:
+ * - Phone portrait: single-column scrollable list
+ * - Phone landscape & tablets: 2-pane split layout (left pane: file summary, cover art,
+ *   file-inclusion card, and Save button; right pane: 2-column tag field grid).
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -211,11 +233,14 @@ fun EditorScreen(
         factory = EditorViewModel.factory(paths, app),
     )
     val state by vm.state.collectAsState()
-    var toolsSheetOpen by remember { mutableStateOf(false) }
-    var showFilenameTags by remember { mutableStateOf(false) }
-    var showRename by remember { mutableStateOf(false) }
-    var showBatchActions by remember { mutableStateOf(false) }
-    var showExitConfirm by remember { mutableStateOf(false) }
+    val windowInfo = rememberAdaptiveWindowInfo()
+
+    var toolsSheetOpen by rememberSaveable { mutableStateOf(false) }
+    var showFilenameTags by rememberSaveable { mutableStateOf(false) }
+    var showRename by rememberSaveable { mutableStateOf(false) }
+    var showBatchActions by rememberSaveable { mutableStateOf(false) }
+    var showExitConfirm by rememberSaveable { mutableStateOf(false) }
+    var filesSheetOpen by rememberSaveable { mutableStateOf(false) }
 
     val requestExit: () -> Unit = {
         if (state.hasEdits) showExitConfirm = true else onDone()
@@ -225,12 +250,17 @@ fun EditorScreen(
     val pickCover = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         uri?.let(vm::onCoverPicked)
     }
-    var filesSheetOpen by remember { mutableStateOf(false) }
 
     val includedSnapshots = state.snapshots.filter { it.path !in state.excludedPaths }
     val fileSummary = when {
         state.excludedPaths.isEmpty() -> "${state.paths.size} file(s) • ${formatSummary(includedSnapshots)}"
         else -> "${includedSnapshots.size} of ${state.paths.size} files • ${formatSummary(includedSnapshots)}"
+    }
+
+    val launchCoverPicker = {
+        pickCover.launch(
+            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+        )
     }
 
     Scaffold(
@@ -279,15 +309,57 @@ fun EditorScreen(
             )
         },
     ) { padding ->
-        Box(Modifier.fillMaxSize().padding(padding)) {
-
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal)),
+        ) {
             if (state.loading) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    LoadingIndicator()
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        LoadingIndicator()
+                        state.progressText?.let { progress ->
+                            Spacer(Modifier.height(12.dp))
+                            Text(
+                                text = progress,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            } else if (windowInfo.useTwoPane) {
+                Row(Modifier.fillMaxSize()) {
+                    EditorSidePane(
+                        state = state,
+                        includedCount = includedSnapshots.size,
+                        compactHeight = windowInfo.isCompactHeight,
+                        isTablet = windowInfo.isTablet,
+                        onOpenFilesSheet = { filesSheetOpen = true },
+                        onPickCover = launchCoverPicker,
+                        onRemoveCover = vm::onCoverRemove,
+                        onUndoCover = vm::onCoverUndo,
+                        onSave = vm::save,
+                        modifier = Modifier
+                            .width(windowInfo.sidePaneWidth)
+                            .fillMaxHeight(),
+                    )
+                    VerticalDivider()
+                    EditorFieldsTwoColumnPane(
+                        state = state,
+                        vm = vm,
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .imePadding(),
+                    )
                 }
             } else {
                 LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .imePadding(),
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
@@ -321,11 +393,13 @@ fun EditorScreen(
                     item { AddFieldSection(state, vm) }
 
                     item {
-                        CoverSection(state, vm) {
-                            pickCover.launch(
-                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                            )
-                        }
+                        CoverSection(
+                            state = state,
+                            onPick = launchCoverPicker,
+                            onRemove = vm::onCoverRemove,
+                            onUndo = vm::onCoverUndo,
+                            thumbnailSize = 96.dp,
+                        )
                     }
 
                     item {
@@ -336,7 +410,7 @@ fun EditorScreen(
                         ) {
                             Icon(Icons.Filled.Save, contentDescription = null)
                             Spacer(Modifier.width(8.dp))
-                            Text("Save ${state.paths.size} file(s)")
+                            Text("Save ${includedSnapshots.size} file(s)")
                         }
                         Spacer(Modifier.height(16.dp))
                     }
@@ -350,14 +424,32 @@ fun EditorScreen(
                         .background(Color.Black.copy(alpha = 0.45f)),
                     contentAlignment = Alignment.Center,
                 ) {
-                    LoadingIndicator()
+                    Surface(
+                        shape = MaterialTheme.shapes.medium,
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
+                        ) {
+                            LoadingIndicator()
+                            state.progressText?.let { progress ->
+                                Spacer(Modifier.height(10.dp))
+                                Text(
+                                    text = progress,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
     }
 
     state.outcomes?.let { outcomes ->
-        AlertDialog(            onDismissRequest = vm::dismissOutcomes,
+        AlertDialog(
+            onDismissRequest = vm::dismissOutcomes,
             title = {
                 val ok = outcomes.count { it.success }
                 Text(
@@ -498,32 +590,35 @@ fun EditorScreen(
     }
 
     if (toolsSheetOpen) {
-        ModalBottomSheet(onDismissRequest = { toolsSheetOpen = false }) {            Text(
-                text = "Tools",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
-            )
-            listOf(
-                Triple(Icons.Filled.TextFields, "Tags from filename…", 0),
-                Triple(Icons.Filled.DriveFileRenameOutline, "Rename from tags…", 1),
-                Triple(Icons.Filled.AutoFixHigh, "Batch actions…", 2),
-            ).forEach { (icon, label, id) ->
-                ListItem(
-                    headlineContent = { Text(label) },
-                    leadingContent = { Icon(icon, contentDescription = null) },
-                    modifier = Modifier.clickable {
-                        toolsSheetOpen = false
-                        when (id) {
-                            0 -> showFilenameTags = true
-                            1 -> showRename = true
-                            2 -> showBatchActions = true
-                        }
-                    },
+        ModalBottomSheet(onDismissRequest = { toolsSheetOpen = false }) {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                Text(
+                    text = "Tools",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
                 )
+                listOf(
+                    Triple(Icons.Filled.TextFields, "Tags from filename…", 0),
+                    Triple(Icons.Filled.DriveFileRenameOutline, "Rename from tags…", 1),
+                    Triple(Icons.Filled.AutoFixHigh, "Batch actions…", 2),
+                ).forEach { (icon, label, id) ->
+                    ListItem(
+                        headlineContent = { Text(label) },
+                        leadingContent = { Icon(icon, contentDescription = null) },
+                        modifier = Modifier.clickable {
+                            toolsSheetOpen = false
+                            when (id) {
+                                0 -> showFilenameTags = true
+                                1 -> showRename = true
+                                2 -> showBatchActions = true
+                            }
+                        },
+                    )
+                }
+                Spacer(Modifier.navigationBarsPadding())
+                Spacer(Modifier.height(36.dp))
             }
-            Spacer(Modifier.navigationBarsPadding())
-            Spacer(Modifier.height(12.dp))
         }
     }
 
@@ -576,7 +671,7 @@ fun EditorScreen(
                 }
                 Column(
                     modifier = Modifier
-                        .heightIn(max = 420.dp)
+                        .heightIn(max = (windowInfo.heightDp * 0.55f).dp.coerceIn(180.dp, 460.dp))
                         .verticalScroll(rememberScrollState()),
                 ) {
                     state.snapshots.forEach { snapshot ->
@@ -596,18 +691,171 @@ fun EditorScreen(
                     }
                 }
                 Spacer(Modifier.navigationBarsPadding())
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(36.dp))
             }
         }
     }
 }
 
 @Composable
-private fun CoverSection(state: EditorState, vm: EditorViewModel, pick: () -> Unit) {
+private fun EditorSidePane(
+    state: EditorState,
+    includedCount: Int,
+    compactHeight: Boolean,
+    isTablet: Boolean,
+    onOpenFilesSheet: () -> Unit,
+    onPickCover: () -> Unit,
+    onRemoveCover: () -> Unit,
+    onUndoCover: () -> Unit,
+    onSave: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .verticalScroll(rememberScrollState())
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        FileInfoCard(state.snapshots)
+
+        CoverSection(
+            state = state,
+            onPick = onPickCover,
+            onRemove = onRemoveCover,
+            onUndo = onUndoCover,
+            thumbnailSize = when {
+                compactHeight -> 68.dp
+                isTablet -> 112.dp
+                else -> 88.dp
+            },
+        )
+
+        if (state.paths.size > 1) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onOpenFilesSheet),
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(12.dp),
+                ) {
+                    Icon(
+                        Icons.Filled.Checklist,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = "$includedCount of ${state.paths.size} files active",
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                        Text(
+                            text = "Tap to include/exclude files",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        }
+
+        Button(
+            onClick = onSave,
+            enabled = state.hasEdits && !state.saving,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(44.dp),
+        ) {
+            Icon(Icons.Filled.Save, contentDescription = null)
+            Spacer(Modifier.width(8.dp))
+            Text("Save $includedCount file(s)")
+        }
+
+        Spacer(Modifier.navigationBarsPadding())
+    }
+}
+
+@Composable
+private fun EditorFieldsTwoColumnPane(
+    state: EditorState,
+    vm: EditorViewModel,
+    modifier: Modifier = Modifier,
+) {
+    val extraPairs = remember(state.extraKeys) { state.extraKeys.chunked(2) }
+    LazyColumn(
+        modifier = modifier,
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        item {
+            FieldPairRow(FieldKey.TITLE, FieldKey.ARTIST, state, vm)
+        }
+        item {
+            FieldPairRow(FieldKey.ALBUM, FieldKey.ALBUM_ARTIST, state, vm)
+        }
+        item {
+            FieldPairRow(FieldKey.YEAR, FieldKey.GENRE, state, vm)
+        }
+        item {
+            FieldPairRow(FieldKey.TRACK, FieldKey.TRACK_TOTAL, state, vm)
+        }
+        item {
+            FieldPairRow(FieldKey.DISC_NO, FieldKey.DISC_TOTAL, state, vm)
+        }
+        item {
+            FieldPairRow(FieldKey.COMPOSER, FieldKey.COMMENT, state, vm)
+        }
+
+        items(
+            items = extraPairs,
+            key = { pair -> "extraPair:" + pair.joinToString("_") { it.name } },
+        ) { pair ->
+            if (pair.size == 2) {
+                FieldPairRow(pair[0], pair[1], state, vm)
+            } else {
+                LabeledField(pair[0], state, vm)
+            }
+        }
+
+        item {
+            AddFieldSection(state, vm)
+            Spacer(Modifier.navigationBarsPadding().height(16.dp))
+        }
+    }
+}
+
+@Composable
+private fun FieldPairRow(
+    leftKey: FieldKey,
+    rightKey: FieldKey,
+    state: EditorState,
+    vm: EditorViewModel,
+) {
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Box(Modifier.weight(1f)) { LabeledField(leftKey, state, vm) }
+        Box(Modifier.weight(1f)) { LabeledField(rightKey, state, vm) }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun CoverSection(
+    state: EditorState,
+    onPick: () -> Unit,
+    onRemove: () -> Unit,
+    onUndo: () -> Unit,
+    thumbnailSize: Dp = 96.dp,
+) {
     Card(Modifier.fillMaxWidth()) {
         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            CoverThumbnail(cover = state.pendingCover ?: state.cover, mixed = state.coverMixed)
-            Spacer(Modifier.width(16.dp))
+            CoverThumbnail(
+                cover = state.pendingCover ?: state.cover,
+                mixed = state.coverMixed,
+                sizeDp = thumbnailSize,
+            )
+            Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text("Cover art", style = MaterialTheme.typography.titleMedium)
                 Text(
@@ -622,13 +870,14 @@ private fun CoverSection(state: EditorState, vm: EditorViewModel, pick: () -> Un
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(6.dp))
-                Row {
-                    FilledTonalButton(onClick = pick) { Text("Replace") }
-                    Spacer(Modifier.width(8.dp))
-                    FilledTonalButton(onClick = vm::onCoverRemove) { Text("Remove") }
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    FilledTonalButton(onClick = onPick) { Text("Replace") }
+                    FilledTonalButton(onClick = onRemove) { Text("Remove") }
                     if (state.pendingCover != null || state.coverRemoveRequested) {
-                        Spacer(Modifier.width(8.dp))
-                        TextButton(onClick = vm::onCoverUndo) { Text("Undo") }
+                        TextButton(onClick = onUndo) { Text("Undo") }
                     }
                 }
             }
@@ -637,18 +886,54 @@ private fun CoverSection(state: EditorState, vm: EditorViewModel, pick: () -> Un
 }
 
 @Composable
-private fun CoverThumbnail(cover: CoverImage?, mixed: Boolean) {
-    val bitmap: Bitmap? = remember(cover) { cover?.let { ImageDecode.decodeScaled(it.bytes, 512) } }
-    Box(contentAlignment = Alignment.Center, modifier = Modifier.size(96.dp)) {
-        if (bitmap != null) {
+private fun CoverThumbnail(
+    cover: CoverImage?,
+    mixed: Boolean,
+    sizeDp: Dp = 96.dp,
+) {
+    val context = LocalContext.current
+    val profile = remember(context) {
+        val prefs = AppPrefs(context)
+        DeviceProfile.get(context, prefs.performanceMode)
+    }
+
+    val initialCached = remember(cover, profile) {
+        cover?.let {
+            ImageDecode.getCached(
+                contentHash = it.hashCode(),
+                maxSize = profile.thumbnailMaxPx,
+                preferRgb565 = profile.preferRgb565,
+            )
+        }
+    }
+    var bitmap by remember(cover, profile) { mutableStateOf<Bitmap?>(initialCached) }
+
+    LaunchedEffect(cover, profile) {
+        if (cover == null) {
+            bitmap = null
+        } else if (bitmap == null) {
+            bitmap = withContext(Dispatchers.Default) {
+                ImageDecode.decodeScaled(
+                    bytes = cover.bytes,
+                    maxSize = profile.thumbnailMaxPx,
+                    preferRgb565 = profile.preferRgb565,
+                    contentHash = cover.hashCode(),
+                )
+            }
+        }
+    }
+
+    Box(contentAlignment = Alignment.Center, modifier = Modifier.size(sizeDp)) {
+        val currentBitmap = bitmap
+        if (currentBitmap != null && !currentBitmap.isRecycled) {
             Image(
-                bitmap = bitmap.asImageBitmap(),
+                bitmap = currentBitmap.asImageBitmap(),
                 contentDescription = "Cover art",
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.size(96.dp),
+                modifier = Modifier.size(sizeDp),
             )
         } else {
-            Card(Modifier.size(96.dp)) {
+            Card(Modifier.size(sizeDp)) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Icon(
                         imageVector = Icons.Filled.Image,
@@ -714,7 +999,7 @@ private fun LabeledField(
     // Mixed = files disagree (different values OR some files empty). Any mixed field
     // with at least one usable value gets the picker; fully-agreeing fields don't.
     val showValuePicker = options.size >= 2 || (field.mixed && options.isNotEmpty())
-    var valueSheetOpen by remember { mutableStateOf(false) }
+    var valueSheetOpen by rememberSaveable(key.name) { mutableStateOf(false) }
 
     OutlinedTextField(
         value = field.text,
@@ -723,24 +1008,26 @@ private fun LabeledField(
         singleLine = true,
         label = {
             Text(
-                when {
+                text = when {
                     field.mixed && options.size >= 2 -> "${fieldLabel(key)} (mixed — ${options.size} values)"
                     field.mixed && options.isNotEmpty() -> "${fieldLabel(key)} (mixed — 1 value)"
                     field.mixed -> "${fieldLabel(key)} (mixed)"
                     else -> fieldLabel(key)
-                }
+                },
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         },
         placeholder = {
-            if (field.mixed) Text("leave empty to keep existing values")
+            if (field.mixed) Text("leave empty to keep existing values", maxLines = 1, overflow = TextOverflow.Ellipsis)
         },
         supportingText = {
             Column {
                 if (field.edited && !field.mixed) {
-                    Text("was: ${field.original.ifEmpty { "(empty)" }}")
+                    Text("was: ${field.original.ifEmpty { "(empty)" }}", maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 if (key in state.overrideKeys) {
-                    Text("per-file changes pending — Save to apply")
+                    Text("per-file changes pending — Save to apply", maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
         },
@@ -775,7 +1062,11 @@ private fun LabeledField(
 
     if (valueSheetOpen && showValuePicker) {
         ModalBottomSheet(onDismissRequest = { valueSheetOpen = false }) {
-            Column(Modifier.padding(horizontal = 8.dp)) {
+            Column(
+                modifier = Modifier
+                    .padding(horizontal = 8.dp)
+                    .verticalScroll(rememberScrollState()),
+            ) {
                 Text(
                     text = "${fieldLabel(key)} — values found in the selected files",
                     style = MaterialTheme.typography.titleMedium,
@@ -797,6 +1088,7 @@ private fun LabeledField(
                     )
                 }
                 Spacer(Modifier.navigationBarsPadding())
+                Spacer(Modifier.height(36.dp))
             }
         }
     }
@@ -808,7 +1100,7 @@ private fun formatSummary(snapshots: List<TagSnapshot>): String =
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AddFieldSection(state: EditorState, vm: EditorViewModel) {
-    var sheetOpen by remember { mutableStateOf(false) }
+    var sheetOpen by rememberSaveable { mutableStateOf(false) }
     Box {
         OutlinedButton(onClick = { sheetOpen = true }) {
             Icon(Icons.Filled.Add, contentDescription = null)
@@ -858,7 +1150,7 @@ private fun AddFieldSection(state: EditorState, vm: EditorViewModel) {
                     )
                 }
                 Spacer(Modifier.navigationBarsPadding())
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(36.dp))
             }
         }
     }

@@ -14,12 +14,20 @@ enum class AudioFormat(val extension: String) {
     OTHER(""),
 }
 
-/** Embedded artwork. */
+/** Embedded artwork with O(1) cached content hash for fast batch deduplication. */
 data class CoverImage(val bytes: ByteArray, val mimeType: String) {
-    override fun equals(other: Any?): Boolean =
-        other is CoverImage && other.bytes.contentEquals(bytes) && other.mimeType == mimeType
+    private val cachedHash: Int = bytes.contentHashCode() * 31 + mimeType.hashCode()
 
-    override fun hashCode(): Int = bytes.contentHashCode() * 31 + mimeType.hashCode()
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is CoverImage) return false
+        if (cachedHash != other.cachedHash || bytes.size != other.bytes.size || mimeType != other.mimeType) {
+            return false
+        }
+        return bytes.contentEquals(other.bytes)
+    }
+
+    override fun hashCode(): Int = cachedHash
 }
 
 /** Everything read from one file. [fields] contains every tag field present with a value. */

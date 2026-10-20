@@ -9,16 +9,20 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material3.Button
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -29,12 +33,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mp3tag.mobile.data.prefs.AppPrefs
 import com.mp3tag.mobile.data.prefs.Id3Version
+import com.mp3tag.mobile.data.prefs.PerformanceMode
 import com.mp3tag.mobile.data.prefs.ThemeMode
 import com.mp3tag.mobile.ui.browser.BrowserScreen
 import com.mp3tag.mobile.ui.browser.BrowserViewModel
@@ -42,6 +47,8 @@ import com.mp3tag.mobile.ui.common.EmptyState
 import com.mp3tag.mobile.ui.editor.EditorScreen
 import com.mp3tag.mobile.ui.settings.SettingsScreen
 import com.mp3tag.mobile.ui.theme.Mp3tagTheme
+import com.mp3tag.mobile.util.DeviceProfile
+import com.mp3tag.mobile.util.ImageDecode
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
@@ -50,6 +57,11 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent { Mp3tagApp() }
+    }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        ImageDecode.trimCache(level)
     }
 }
 
@@ -71,6 +83,12 @@ class AppViewModel(application: android.app.Application) : AndroidViewModel(appl
 
     private val _themeMode = MutableStateFlow(prefs.themeMode)
     val themeMode = _themeMode.asStateFlow()
+
+    private val _id3Version = MutableStateFlow(prefs.id3Version)
+    val id3Version = _id3Version.asStateFlow()
+
+    private val _performanceMode = MutableStateFlow(prefs.performanceMode)
+    val performanceMode = _performanceMode.asStateFlow()
 
     private var sessionCounter = 0
 
@@ -101,14 +119,21 @@ class AppViewModel(application: android.app.Application) : AndroidViewModel(appl
 
     fun setId3Version(version: Id3Version) {
         prefs.id3Version = version
+        _id3Version.value = version
     }
 
-    val id3Version: Id3Version get() = prefs.id3Version
+    fun setPerformanceMode(mode: PerformanceMode) {
+        prefs.performanceMode = mode
+        _performanceMode.value = mode
+        DeviceProfile.get(getApplication(), mode)
+    }
 }
 
 @Composable
 fun Mp3tagApp(appViewModel: AppViewModel = viewModel()) {
     val themeMode by appViewModel.themeMode.collectAsState()
+    val id3Version by appViewModel.id3Version.collectAsState()
+    val performanceMode by appViewModel.performanceMode.collectAsState()
     val hasPermission by appViewModel.hasPermission.collectAsState()
     val screen by appViewModel.screen.collectAsState()
     val context = LocalContext.current
@@ -153,10 +178,12 @@ fun Mp3tagApp(appViewModel: AppViewModel = viewModel()) {
                 )
 
                 Screen.Settings -> SettingsScreen(
-                    id3Version = appViewModel.id3Version,
+                    id3Version = id3Version,
                     onId3VersionChange = appViewModel::setId3Version,
                     themeMode = themeMode,
                     onThemeChange = appViewModel::setThemeMode,
+                    performanceMode = performanceMode,
+                    onPerformanceModeChange = appViewModel::setPerformanceMode,
                     onBack = appViewModel::back,
                 )
             }
@@ -167,23 +194,31 @@ fun Mp3tagApp(appViewModel: AppViewModel = viewModel()) {
 
 @Composable
 private fun PermissionGate(onRequest: () -> Unit) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
+    Box(
+        contentAlignment = Alignment.Center,
         modifier = Modifier
             .fillMaxSize()
-            .padding(32.dp),
+            .safeDrawingPadding(),
     ) {
-        EmptyState(
-            icon = Icons.Filled.Folder,
-            title = "All-files access needed",
-            subtitle = "MP3Tag Mobile edits audio tags in place, like MP3Tag on Windows. " +
-                "Grant \"All files access\" so it can browse folders and rewrite your music files.\n\n" +
-                "This app is for personal use and is not distributed through the Play Store.",
-        )
-        Spacer(Modifier.height(24.dp))
-        Button(onClick = onRequest, modifier = Modifier.height(48.dp)) {
-            Text("Grant all-files access")
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier
+                .widthIn(max = 520.dp)
+                .verticalScroll(rememberScrollState())
+                .padding(24.dp),
+        ) {
+            EmptyState(
+                icon = Icons.Filled.Folder,
+                title = "All-files access needed",
+                subtitle = "MP3Tag Mobile edits audio tags in place, like MP3Tag on Windows. " +
+                    "Grant \"All files access\" so it can browse folders and rewrite your music files.\n\n" +
+                    "This app is for personal use and is not distributed through the Play Store.",
+            )
+            Spacer(Modifier.height(16.dp))
+            Button(onClick = onRequest, modifier = Modifier.height(48.dp)) {
+                Text("Grant all-files access")
+            }
         }
     }
 }

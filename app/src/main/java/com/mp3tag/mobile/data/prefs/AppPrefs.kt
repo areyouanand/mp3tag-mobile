@@ -14,6 +14,12 @@ enum class ThemeMode(val label: String) {
     DARK("Dark"),
 }
 
+enum class PerformanceMode(val label: String) {
+    AUTO("Auto (match device hardware)"),
+    HIGH_END("High performance (fast parallel I/O & hi-res covers)"),
+    LOW_SPEC("Low-spec / memory saver (low RAM & slow SD safe)"),
+}
+
 /**
  * Simple SharedPreferences-backed settings store.
  */
@@ -31,6 +37,11 @@ class AppPrefs(context: Context) {
         get() = ThemeMode.entries.firstOrNull { it.name == prefs.getString(KEY_THEME, null) }
             ?: ThemeMode.SYSTEM
         set(value) = prefs.edit().putString(KEY_THEME, value.name).apply()
+
+    var performanceMode: PerformanceMode
+        get() = PerformanceMode.entries.firstOrNull { it.name == prefs.getString(KEY_PERFORMANCE_MODE, null) }
+            ?: PerformanceMode.AUTO
+        set(value) = prefs.edit().putString(KEY_PERFORMANCE_MODE, value.name).apply()
 
     /** Most-recently-visited folders, newest first. */
     var recentFolders: List<String>
@@ -60,6 +71,7 @@ class AppPrefs(context: Context) {
     companion object {
         private const val KEY_ID3_VERSION = "id3_version"
         private const val KEY_THEME = "theme_mode"
+        private const val KEY_PERFORMANCE_MODE = "performance_mode"
         private const val KEY_RECENTS = "recent_folders"
         private const val KEY_LAST_FOLDER = "last_folder"
         private const val KEY_SAVED_PATTERNS = "saved_patterns"
