@@ -1,5 +1,14 @@
 # MP3Tag Mobile
 
+> [!IMPORTANT]
+> **Unofficial fan build.** MP3Tag Mobile is a free, fan-made Android app *inspired by* the
+> workflow of [Mp3tag](https://www.mp3tag.de) for Windows. It is **not an official Mp3tag
+> product** and is **not affiliated with, sponsored by, or endorsed by** Florian Heidenreich /
+> [Mp3tag](https://www.mp3tag.de). No code or assets from the original Windows application are
+> used — this is an independent, from-scratch Android implementation. The name "Mp3tag" is only
+> used to describe the inspiration; all trademark rights belong to their respective owners.
+> For the official Windows tool, visit **[mp3tag.de](https://www.mp3tag.de)**.
+
 A personal-use Android audio tag editor and file manager that mirrors the workflow of [MP3Tag](https://www.mp3tag.de) for
 Windows, built with Kotlin, Jetpack Compose, and **Material 3 Expressive**.
 

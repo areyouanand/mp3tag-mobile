@@ -2,7 +2,7 @@
 
 **You are taking over an active, working project.** Read this first — it documents everything
 that is NOT obvious from the code. The whole project lives in this directory (= git repo,
-remote: `github.com/areyouanand/mp3tag-mobile`, private, push access via GitHub CLI device auth).
+remote: `github.com/areyouanand/mp3tag-mobile`, **public** since Oct 2026, push access via GitHub CLI device auth).
 
 ## What this is
 
@@ -30,6 +30,13 @@ Single user, sideloaded, never going to the Play Store.
 5. Editing follows MP3Tag semantics, implemented as a **per-file cached-edit model** (see below).
 6. **Home Workspace Grid is the app entry point** — launches into 4 grid tiles (`Tag editor`, `File manager`, `Automate`, `Settings`). Only the grid tile for `Settings` is shown on the Home page (no duplicate top-bar gear icon).
 7. **Every change goes under a new release number (`versionName` / `versionCode`)** — bump `versionName` and `versionCode` in `app/build.gradle.kts` (and the version string in `SettingsScreen.kt`), tag `v<versionName>`, and let the GitHub Release + APK filename (`mp3tag-mobile-v<versionName>-debug.apk`) reflect that version.
+8. **The repo is PUBLIC and must stay clearly marked as an unofficial fan build** — the
+   GitHub description, the topics (incl. `unofficial`), and the `[!IMPORTANT]` disclaimer block
+   at the top of `README.md` state that this is a fan-made, independent Android implementation
+   inspired by Mp3tag for Windows, NOT affiliated with / endorsed by Florian Heidenreich
+   (mp3tag.de), containing no original Mp3tag code. Keep that disclaimer intact in any README
+   rework; reflect the same "unofficial fan build" wording anywhere the app presents itself
+   publicly (e.g. if an About screen is ever added).
 
 ## Current state (v0.4.1 — everything below is verified working on the device)
 
