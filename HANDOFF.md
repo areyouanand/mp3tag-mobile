@@ -38,9 +38,11 @@ Single user, sideloaded, never going to the Play Store.
    rework; reflect the same "unofficial fan build" wording anywhere the app presents itself
    publicly (e.g. if an About screen is ever added).
 9. **Open source under MIT (`LICENSE`)** — code is free to use/modify/fork, including commercial
-   use. The LICENSE file also carries an informational trademark & non-affiliation notice:
+   use. `LICENSE` is kept as **pure, unmodified MIT text** so GitHub detects and labels it MIT
+   (any extra text in the file downgrades detection to "Other"). The trademark & non-affiliation
+   disclaimer lives in `README.md` instead (the `[!IMPORTANT]` block and the License section):
    forks must not imply endorsement by, or affiliation with, the original Mp3tag (mp3tag.de)
-   or its author. Do not remove that notice when touching `LICENSE`.
+   or its author.
 
 ## Current state (v0.4.1 — everything below is verified working on the device)
 

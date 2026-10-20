@@ -19,18 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----------------------------------------------------------------------------
-
-Trademark & affiliation notice (informational — not a modification of the
-MIT license terms above):
-
-"Mp3tag" is the name of tag-editing software for Windows by Florian
-Heidenreich (https://www.mp3tag.de) and may be a trademark of its respective
-owner. This project (MP3Tag Mobile) is an unofficial, fan-made Android
-implementation inspired by that workflow. It is not affiliated with,
-sponsored by, or endorsed by Florian Heidenreich, and it contains no code or
-assets from the original Windows application. Forks and redistributions of
-this project's source code are welcome under the MIT license, but they should
-not imply endorsement by, or affiliation with, the original Mp3tag or its
-author.
