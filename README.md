@@ -1,21 +1,23 @@
 # MP3Tag Mobile
 
-A personal-use Android tag editor that mirrors the workflow of [MP3Tag](https://www.mp3tag.de) for
-Windows, built with Kotlin, Jetpack Compose and **Material 3 Expressive**.
+A personal-use Android audio tag editor and file manager that mirrors the workflow of [MP3Tag](https://www.mp3tag.de) for
+Windows, built with Kotlin, Jetpack Compose, and **Material 3 Expressive**.
 
+- Current release: **v0.3.1** (`versionCode = 5`)
 - Minimum Android version: **12 (API 31)**
 - Uses the **All files access** permission (`MANAGE_EXTERNAL_STORAGE`) so it can browse any folder
   and rewrite files in place — sideload only, not for Play Store distribution.
 
-## Current status — Phase 1 + 2
+## Current status — v0.3.1
 
 | Feature | State |
 |---|---|
-| **Home page in Grid style (`Tag editor`, `File manager`, `Automate`, `Settings`)** | ✅ v0.3.0 |
+| **Home workspace in Grid style (`Tag editor`, `File manager`, `Automate`, `Settings`)** | ✅ v0.3.1 |
 | **Full File Manager (copy, move/cut, paste, rename, delete, new folder, sort, hidden files, properties, open in Tag Editor)** | ✅ v0.3.0 |
 | **Automate workspace section (placeholder ready for automation rules)** | ✅ v0.3.0 |
+| **Select / edit entire folders in Tag Editor (folder checkbox, long-press folder, or menu action)** | ✅ v0.3.1 |
 | Folder browser with filter, recent folders, storage-device picker, natural sorting | ✅ |
-| Multi-select files & entire folders (checkbox or long-press folder), batch tag editing with MP3Tag-style "mixed" field handling | ✅ |
+| Multi-select files & folders, batch tag editing with MP3Tag-style "mixed" field handling | ✅ |
 | Editor file picker: include/exclude files from the edit (MP3Tag-style) | ✅ |
 | Single-file editing (long-press a file) | ✅ |
 | Fields: title, artist, album artist, album, year, track/disc + totals, genre, composer, comment | ✅ |
@@ -27,6 +29,7 @@ Windows, built with Kotlin, Jetpack Compose and **Material 3 Expressive**.
 | Cover art: view, embed/replace from photo picker, remove | ✅ |
 | **Adaptive layouts: phone & tablet, portrait & landscape (2-pane split view, 2-column grid)** | ✅ v0.2.2 |
 | **Hardware-tier scaling: high-end parallel I/O & low-spec memory/RGB_565 saver** | ✅ v0.2.2 |
+| **Versioned APK builds (`mp3tag-mobile-v<versionName>-debug.apk`) & matching GitHub Releases** | ✅ v0.3.1 |
 | MP3: ID3v2.3 / ID3v2.4 writing (configurable), ID3v1 preserved | ✅ |
 | WAV: RIFF INFO + ID3 chunks (MP3Tag-style both) | ✅ |
 | DSD: DSF files tagged through their embedded ID3v2 tag | ✅ |
@@ -44,54 +47,63 @@ Toolchain installed locally (set up for CLI builds):
 
 Build from this folder:
 
-```
+```powershell
 $env:JAVA_HOME = "$env:LOCALAPPDATA\mp3tag-tooling\jdk-21.0.12.1+1"
+$env:ANDROID_HOME = "$env:LOCALAPPDATA\mp3tag-tooling\sdk"
 .\gradlew.bat assembleDebug
 ```
 
-The debug APK lands at `app\build\outputs\apk\debug\mp3tag-mobile-v<versionName>-debug.apk` — sideload it onto the phone
-(open it on the device, or `adb install`). Opening the project root in Android Studio works too;
-it will reuse the SDK via `local.properties`.
+The debug APK lands at `app\build\outputs\apk\debug\mp3tag-mobile-v<versionName>-debug.apk` (for example,
+`mp3tag-mobile-v0.3.1-debug.apk`) — sideload it onto the device or install via `adb install -r`.
+Opening the project root in Android Studio works too; it will reuse the SDK via `local.properties`.
 
-### CI / install from your phone
+### CI / Releases & Installing on Your Device
 
-Every change increments `versionName` and `versionCode` in `app/build.gradle.kts` (and `SettingsScreen.kt`).
+Every logical change bumps `versionName` and `versionCode` in `app/build.gradle.kts` (and `SettingsScreen.kt`).
 Pushing to `master` runs a GitHub Action that builds the versioned APK (`mp3tag-mobile-v<versionName>-debug.apk`)
-and publishes/updates the corresponding versioned GitHub Release (`v<versionName>`, marked as Latest):
+and publishes/updates the corresponding versioned GitHub Release (`v<versionName>`, marked as **Latest**):
 
-```
-https://github.com/areyouanand/mp3tag-mobile/releases/latest
-```
+- Latest release page: `https://github.com/areyouanand/mp3tag-mobile/releases/latest`
+- Current release (`v0.3.1`): `https://github.com/areyouanand/mp3tag-mobile/releases/tag/v0.3.1`
 
 All builds — local and CI — sign with the committed shared debug keystore, so CI-built APKs install
 over previously installed versions without uninstalling.
 
-## First launch
+## Using the App
 
-1. Grant **All files access** in the system screen the app opens for you.
-2. You start at `/storage/emulated/0` — navigate to your music folder.
-3. Tap files to select them (like checkbox selection in MP3Tag), then tap **Edit**.
-4. Long-press a single file to edit just that one.
-5. On save, MP3 (and DSF) files are written with the ID3v2 version configured in Settings.
+1. **Grant All-files access**: On first launch, grant **All files access** in the system screen opened by the app.
+2. **Home Grid**: Choose from the four grid cards:
+   - **Tag editor**: Browse folders across Internal storage, SD card, and USB OTG. Tap audio files or folder checkboxes to multi-select (and tap **Edit**), or long-press any file or folder to edit its tags immediately.
+   - **File manager**: Full storage file manager with breadcrumb path bar, search, Copy, Move (Cut), Paste, Rename, Delete, New Folder, Sort (Name, Date, Size, Type; Ascending/Descending), Show/Hide `.dot` hidden files, Properties/Details, and one-tap **Edit tags** when audio files are selected.
+   - **Automate**: Workspace section reserved for upcoming automated tagging and file workflows.
+   - **Settings**: Configure MP3/DSF ID3v2 version (`v2.3` vs `v2.4`), Theme (`System`, `Light`, `Dark`), and Device & performance mode (`Auto`, `High performance`, `Low-spec / memory saver`).
 
 ## Project layout
 
 ```
 app/src/main/java/com/mp3tag/mobile/
-├── MainActivity.kt            # app shell, navigation, all-files permission gate
+├── MainActivity.kt                  # app shell, workspace navigation, all-files permission gate
 ├── data/
-│   ├── fs/FolderScanner.kt    # directory listing + natural sort
-│   ├── prefs/AppPrefs.kt      # ID3 version, WAV mode, theme, recents
+│   ├── fs/FolderScanner.kt          # directory listing, recursive folder audio scan, natural sort
+│   ├── prefs/AppPrefs.kt            # ID3 version, theme, performance mode, recents, saved patterns
 │   └── tag/
-│       ├── TagData.kt         # models + editable field list
-│       └── TagEngine.kt       # JAudioTagger read/write engine
+│       ├── TagData.kt               # models, O(1) hashed CoverImage, editable field catalog
+│       └── TagEngine.kt             # JAudioTagger read/write engine
 ├── ui/
-│   ├── browser/               # folder + file list, selection
-│   ├── editor/                # tag editor (single & batch)
-│   ├── settings/              # tag format options, theme
-│   ├── common/Common.kt
-│   └── theme/Theme.kt         # Material 3 Expressive theme
-└── util/Format.kt             # size/duration/cover decoding helpers
+│   ├── home/HomeScreen.kt           # Grid Home dashboard (Tag editor, File manager, Automate, Settings)
+│   ├── browser/                     # Tag editor folder & file browser, file/folder multi-select
+│   ├── editor/                      # Tag editor (single & batch, 1-pane & 2-pane, ToolsDialogs)
+│   ├── filemanager/                 # Full File Manager (copy, move, paste, rename, delete, sort, info)
+│   ├── automate/AutomateScreen.kt   # Automate workspace placeholder
+│   ├── settings/SettingsScreen.kt   # ID3, theme, and hardware performance settings
+│   ├── common/
+│   │   ├── AdaptiveLayout.kt        # Window size classes & phone/tablet portrait/landscape layout rules
+│   │   └── Common.kt                # Shared UI components
+│   └── theme/Theme.kt               # Material 3 Expressive theme
+└── util/
+    ├── DeviceProfile.kt             # Hardware tier detection (LOW_SPEC / STANDARD / HIGH_END)
+    ├── Format.kt                    # Size/duration formatting + LruCache & OOM-safe ImageDecode
+    └── PatternParser.kt             # %field% pattern parser and filename builder
 ```
 
 Tag engine: [JAudioTagger 3.0.1](https://www.jthink.net/jaudiotagger/) (pure Java). DFF support will
