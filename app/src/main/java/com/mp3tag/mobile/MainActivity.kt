@@ -41,10 +41,14 @@ import com.mp3tag.mobile.data.prefs.AppPrefs
 import com.mp3tag.mobile.data.prefs.Id3Version
 import com.mp3tag.mobile.data.prefs.PerformanceMode
 import com.mp3tag.mobile.data.prefs.ThemeMode
+import com.mp3tag.mobile.ui.automate.AutomateScreen
 import com.mp3tag.mobile.ui.browser.BrowserScreen
 import com.mp3tag.mobile.ui.browser.BrowserViewModel
 import com.mp3tag.mobile.ui.common.EmptyState
 import com.mp3tag.mobile.ui.editor.EditorScreen
+import com.mp3tag.mobile.ui.filemanager.FileManagerScreen
+import com.mp3tag.mobile.ui.filemanager.FileManagerViewModel
+import com.mp3tag.mobile.ui.home.HomeScreen
 import com.mp3tag.mobile.ui.settings.SettingsScreen
 import com.mp3tag.mobile.ui.theme.Mp3tagTheme
 import com.mp3tag.mobile.util.DeviceProfile
@@ -66,9 +70,16 @@ class MainActivity : ComponentActivity() {
 }
 
 sealed interface Screen {
+    data object Home : Screen
     data object Browser : Screen
-    data object Settings : Screen
-    data class Editor(val paths: List<String>, val session: Int) : Screen
+    data object FileManager : Screen
+    data object Automate : Screen
+    data class Settings(val returnTo: Screen = Home) : Screen
+    data class Editor(
+        val paths: List<String>,
+        val session: Int,
+        val returnTo: Screen = Browser,
+    ) : Screen
 }
 
 class AppViewModel(application: android.app.Application) : AndroidViewModel(application) {
@@ -78,7 +89,7 @@ class AppViewModel(application: android.app.Application) : AndroidViewModel(appl
     private val _hasPermission = MutableStateFlow(checkPermission())
     val hasPermission = _hasPermission.asStateFlow()
 
-    private val _screen = MutableStateFlow<Screen>(Screen.Browser)
+    private val _screen = MutableStateFlow<Screen>(Screen.Home)
     val screen = _screen.asStateFlow()
 
     private val _themeMode = MutableStateFlow(prefs.themeMode)
@@ -99,17 +110,37 @@ class AppViewModel(application: android.app.Application) : AndroidViewModel(appl
     private fun checkPermission(): Boolean =
         android.os.Environment.isExternalStorageManager()
 
-    fun openEditor(paths: List<String>) {
-        sessionCounter += 1
-        _screen.value = Screen.Editor(paths, sessionCounter)
+    fun openHome() {
+        _screen.value = Screen.Home
     }
 
-    fun openSettings() {
-        _screen.value = Screen.Settings
+    fun openTagEditor() {
+        _screen.value = Screen.Browser
+    }
+
+    fun openFileManager() {
+        _screen.value = Screen.FileManager
+    }
+
+    fun openAutomate() {
+        _screen.value = Screen.Automate
+    }
+
+    fun openEditor(paths: List<String>, returnTo: Screen = Screen.Browser) {
+        sessionCounter += 1
+        _screen.value = Screen.Editor(paths, sessionCounter, returnTo)
+    }
+
+    fun openSettings(returnTo: Screen = _screen.value) {
+        _screen.value = Screen.Settings(returnTo)
     }
 
     fun back() {
-        _screen.value = Screen.Browser
+        _screen.value = when (val current = _screen.value) {
+            is Screen.Editor -> current.returnTo
+            is Screen.Settings -> current.returnTo
+            else -> Screen.Home
+        }
     }
 
     fun setThemeMode(mode: ThemeMode) {
@@ -160,11 +191,31 @@ fun Mp3tagApp(appViewModel: AppViewModel = viewModel()) {
             PermissionGate(onRequest = { requestAllFilesAccess(context) })
         } else {
             val browserVm: BrowserViewModel = viewModel()
+            val fileManagerVm: FileManagerViewModel = viewModel()
+
             when (val current = screen) {
+                Screen.Home -> HomeScreen(
+                    onOpenTagEditor = appViewModel::openTagEditor,
+                    onOpenFileManager = appViewModel::openFileManager,
+                    onOpenAutomate = appViewModel::openAutomate,
+                    onOpenSettings = { appViewModel.openSettings(Screen.Home) },
+                )
+
                 Screen.Browser -> BrowserScreen(
-                    onEditFiles = appViewModel::openEditor,
-                    onOpenSettings = appViewModel::openSettings,
+                    onBackHome = appViewModel::openHome,
+                    onEditFiles = { paths -> appViewModel.openEditor(paths, Screen.Browser) },
+                    onOpenSettings = { appViewModel.openSettings(Screen.Browser) },
                     viewModel = browserVm,
+                )
+
+                Screen.FileManager -> FileManagerScreen(
+                    onBackHome = appViewModel::openHome,
+                    onEditAudioTags = { paths -> appViewModel.openEditor(paths, Screen.FileManager) },
+                    viewModel = fileManagerVm,
+                )
+
+                Screen.Automate -> AutomateScreen(
+                    onBack = appViewModel::openHome,
                 )
 
                 is Screen.Editor -> EditorScreen(
@@ -173,11 +224,15 @@ fun Mp3tagApp(appViewModel: AppViewModel = viewModel()) {
                     onDone = {
                         appViewModel.back()
                         browserVm.refresh()
+                        fileManagerVm.refresh()
                     },
-                    onFilesRenamed = { browserVm.refresh() },
+                    onFilesRenamed = {
+                        browserVm.refresh()
+                        fileManagerVm.refresh()
+                    },
                 )
 
-                Screen.Settings -> SettingsScreen(
+                is Screen.Settings -> SettingsScreen(
                     id3Version = id3Version,
                     onId3VersionChange = appViewModel::setId3Version,
                     themeMode = themeMode,
@@ -187,7 +242,12 @@ fun Mp3tagApp(appViewModel: AppViewModel = viewModel()) {
                     onBack = appViewModel::back,
                 )
             }
-            BackHandler(enabled = screen != Screen.Browser) { appViewModel.back() }
+
+            BackHandler(
+                enabled = screen is Screen.Settings || screen is Screen.Automate
+            ) {
+                appViewModel.back()
+            }
         }
     }
 }

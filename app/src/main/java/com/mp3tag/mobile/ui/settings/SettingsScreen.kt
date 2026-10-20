@@ -226,15 +226,16 @@ private fun AboutSettingsBlock() {
     SectionHeader("About")
     Card(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Column(Modifier.padding(16.dp)) {
-            Text("MP3Tag Mobile 0.2.2", style = MaterialTheme.typography.titleMedium)
+            Text("MP3Tag Mobile 0.3.0", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(8.dp))
             Text(
-                text = "Personal-use tag editor inspired by MP3Tag for Windows.\n\n" +
-                    "Supported now: MP3 (ID3v1/v2.3/v2.4), FLAC, M4A/MP4, Ogg, " +
-                    "WAV (RIFF INFO + ID3), DSF (DSD), tags from filename, rename from tags, " +
-                    "batch regex & case transforms, adaptive phone/tablet layouts.\n\n" +
-                    "Roadmap: CSV tag export/import, DFF (DSDIFF) via TagLib, Opus/WMA/APE, " +
-                    "MusicBrainz & Discogs lookup.",
+                text = "Personal-use tag editor & file manager inspired by MP3Tag for Windows.\n\n" +
+                    "Supported now: Home workspace grid, Tag Editor for MP3 (ID3v1/v2.3/v2.4), FLAC, " +
+                    "M4A/MP4, Ogg, WAV (RIFF INFO + ID3), DSF (DSD), tags from filename, rename from tags, " +
+                    "batch regex & case transforms, full File Manager (copy, move, rename, delete, new folder, " +
+                    "sort, properties), and adaptive phone/tablet layouts.\n\n" +
+                    "Roadmap: Automate workflows, CSV tag export/import, DFF (DSDIFF) via TagLib, " +
+                    "Opus/WMA/APE, MusicBrainz & Discogs lookup.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

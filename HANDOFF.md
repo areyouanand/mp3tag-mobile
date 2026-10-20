@@ -13,7 +13,7 @@ Single user, sideloaded, never going to the Play Store.
 - minSdk 31 (Android 12), target/compile SDK 36, AGP 8.13.2, Kotlin 2.4.21, Gradle 8.14.4 (wrapper)
 - Tag engine: **JAudioTagger 3.0.1** (pure Java): MP3 (ID3v1 preserved; v2.3/v2.4 selectable),
   FLAC, M4A/MP4, Ogg Vorbis, **WAV (ID3 + RIFF INFO chunks)**, **DSF (DSD, embedded ID3v2)**
-- versionName 0.2.2 / versionCode 3 (v0.1.0 phase 1, v0.2.1 phase 2, v0.2.2 adaptive UI + hardware scaling)
+- versionName 0.3.0 / versionCode 4 (v0.1.0 phase 1, v0.2.1 phase 2, v0.2.2 adaptive UI + hardware scaling, v0.3.0 Home grid + File Manager + Automate)
 
 ## Locked-in product decisions (do not silently change)
 
@@ -24,7 +24,18 @@ Single user, sideloaded, never going to the Play Store.
 4. All pickers/menus are **ModalBottomSheets** — NOT DropdownMenu (broken on the device; see gotchas).
 5. Editing follows MP3Tag semantics, implemented as a **per-file cached-edit model** (see below).
 
-## Current state (v0.2.2 — everything below is verified working on the device)
+## Current state (v0.3.0 — everything below is verified working on the device)
+
+**Home Workspace Grid** (`ui/home/HomeScreen.kt`):
+- Launches into a Material 3 Expressive grid dashboard (`2` columns on phones, `3` columns on wide tablets/landscape `>= 900dp`) with cards for:
+  1. **Tag editor**: opens the existing MP3Tag folder browser and batch/single tag editor workflow.
+  2. **File manager**: opens the full-storage file manager (`ui/filemanager/`).
+  3. **Automate**: opens the `AutomateScreen` (`ui/automate/`) placeholder for upcoming automated workflows.
+  4. **Settings**: opens app settings and returns to whichever workspace launched it.
+
+**File Manager** (`ui/filemanager/FileManagerScreen.kt`, `FileManagerViewModel.kt`):
+- Full storage file & folder browser across Internal storage, SD card, and USB OTG with interactive breadcrumb path bar, search filter, and adaptive 1-pane / 2-pane layouts.
+- Operations: **Copy**, **Move (Cut)** (same-volume fast `renameTo` + cross-volume stream fallback), **Paste** with collision suffixing (`name (2).ext`) and self-subfolder protection, **Rename**, **Delete** (recursive with confirmation), **Create new folder**, **Properties / Details** (recursive folder/file count, byte size, modified timestamp, access flags), **Sort by** (Name, Date, Size, Type; Ascending/Descending), **Show/Hide `.dot` hidden files**, **Invert selection**, and direct **"Edit tags"** jump into `EditorScreen` when audio files are selected.
 
 **Adaptive Form Factors & Orientations** (`ui/common/AdaptiveLayout.kt`):
 - **Phone Portrait (`< 600dp` width)**: single-column layouts with `ModalBottomSheet` menus/pickers and bottom selection bar.
@@ -144,9 +155,11 @@ mixed-cover detection. Section sits at the bottom of the editor (user requested)
   - `MainActivity.kt` — activity, AppViewModel (nav: Browser/Settings/Editor, permission, theme)
   - `data/fs/` folder scanner · `data/prefs/AppPrefs.kt` settings/recents/patterns
   - `data/tag/TagData.kt` + `TagEngine.kt` — models + JAudioTagger engine
-  - `ui/browser/`, `ui/editor/` (EditorScreen, EditorViewModel, ToolsDialogs), `ui/settings/`,
-    `ui/common/` (`Common.kt`, `AdaptiveLayout.kt`), `ui/theme/Theme.kt` (M3 Expressive),
-    `util/` (`DeviceProfile.kt`, `Format.kt` + `ImageDecode`, `PatternParser.kt`)
+  - `ui/home/` (`HomeScreen`), `ui/filemanager/` (`FileManagerScreen`, `FileManagerViewModel`),
+    `ui/automate/` (`AutomateScreen`), `ui/browser/`, `ui/editor/` (`EditorScreen`, `EditorViewModel`,
+    `ToolsDialogs`), `ui/settings/`, `ui/common/` (`Common.kt`, `AdaptiveLayout.kt`),
+    `ui/theme/Theme.kt` (M3 Expressive), `util/` (`DeviceProfile.kt`, `Format.kt` + `ImageDecode`,
+    `PatternParser.kt`)
 - No tests exist yet; verification = build green + install on device + uiautomator checks.
 
 ## Roadmap

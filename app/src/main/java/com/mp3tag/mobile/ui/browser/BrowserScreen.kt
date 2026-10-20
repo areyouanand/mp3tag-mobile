@@ -1,5 +1,6 @@
 package com.mp3tag.mobile.ui.browser
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
@@ -37,6 +38,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Refresh
@@ -104,6 +106,7 @@ import java.io.File
 )
 @Composable
 fun BrowserScreen(
+    onBackHome: () -> Unit,
     onEditFiles: (List<String>) -> Unit,
     onOpenSettings: () -> Unit,
     viewModel: BrowserViewModel = viewModel(),
@@ -116,7 +119,15 @@ fun BrowserScreen(
     var storageDialogOpen by rememberSaveable { mutableStateOf(false) }
 
     val root = state.directory
-    val isAtStart = root.absolutePath == android.os.Environment.getExternalStorageDirectory().absolutePath
+    val isAtStart = !viewModel.canNavigateUp()
+
+    BackHandler {
+        when {
+            state.selectedPaths.isNotEmpty() -> viewModel.clearSelection()
+            viewModel.canNavigateUp() -> viewModel.navigateUp()
+            else -> onBackHome()
+        }
+    }
 
     val filteredDirs = remember(state.directories, filter) {
         if (filter.isBlank()) state.directories
@@ -147,13 +158,22 @@ fun BrowserScreen(
                     }
                 },
                 navigationIcon = {
-                    if (!isAtStart) {
-                        IconButton(onClick = viewModel::navigateUp) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Up")
-                        }
+                    IconButton(
+                        onClick = {
+                            if (!viewModel.navigateUp()) {
+                                onBackHome()
+                            }
+                        },
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
                 actions = {
+                    if (!isAtStart) {
+                        IconButton(onClick = onBackHome) {
+                            Icon(Icons.Filled.Home, contentDescription = "Home")
+                        }
+                    }
                     if (windowInfo.useTwoPane) {
                         IconButton(onClick = viewModel::selectAll) {
                             Icon(Icons.Filled.SelectAll, contentDescription = "Select all files")
@@ -342,6 +362,14 @@ fun BrowserScreen(
                     modifier = Modifier.clickable {
                         menuSheetOpen = false
                         onOpenSettings()
+                    },
+                )
+                ListItem(
+                    headlineContent = { Text("Back to Home") },
+                    leadingContent = { Icon(Icons.Filled.Home, contentDescription = null) },
+                    modifier = Modifier.clickable {
+                        menuSheetOpen = false
+                        onBackHome()
                     },
                 )
                 Spacer(Modifier.navigationBarsPadding())

@@ -92,8 +92,18 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun navigateUp() {
-        _state.value.directory.parentFile?.let { open(it) }
+    fun canNavigateUp(): Boolean {
+        val dir = _state.value.directory
+        val volumes = _state.value.volumes
+        if (volumes.any { it.directory.absolutePath == dir.absolutePath }) return false
+        return dir.parentFile != null && dir.parentFile?.canRead() == true
+    }
+
+    fun navigateUp(): Boolean {
+        if (!canNavigateUp()) return false
+        val parent = _state.value.directory.parentFile ?: return false
+        open(parent)
+        return true
     }
 
     fun openVolume(volume: StorageVolumeInfo) = open(volume.directory)
