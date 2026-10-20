@@ -24,6 +24,7 @@ Single user, sideloaded, never going to the Play Store.
 4. All pickers/menus are **ModalBottomSheets** — NOT DropdownMenu (broken on the device; see gotchas).
 5. Editing follows MP3Tag semantics, implemented as a **per-file cached-edit model** (see below).
 6. **Home Workspace Grid is the app entry point** — launches into 4 grid tiles (`Tag editor`, `File manager`, `Automate`, `Settings`). Only the grid tile for `Settings` is shown on the Home page (no duplicate top-bar gear icon).
+7. **Every change goes under a new release number (`versionName` / `versionCode`)** — bump `versionName` and `versionCode` in `app/build.gradle.kts` (and the version string in `SettingsScreen.kt`), tag `v<versionName>`, and let the GitHub Release + APK filename (`mp3tag-mobile-v<versionName>-debug.apk`) reflect that version.
 
 ## Current state (v0.3.1 — everything below is verified working on the device)
 
@@ -142,15 +143,14 @@ mixed-cover detection. Section sits at the bottom of the editor (user requested)
 
 ## CI / installs from anywhere
 
-- `.github/workflows/build.yml`: builds the APK on every push to `master` (+ manual dispatch),
-  uploads a per-run artifact, and updates a rolling **`latest` prerelease** so there is a
-  permanent phone-downloadable URL:
-  `https://github.com/areyouanand/mp3tag-mobile/releases/latest/download/mp3tag-mobile-debug.apk`
-- Pushing a `v*` tag creates a versioned release (`--latest` flagged).
+- **Versioning rule**: every logical change must bump `versionName` and `versionCode` in `app/build.gradle.kts` (and `SettingsScreen.kt`).
+- `base.archivesName.set("mp3tag-mobile-v$versionName")` in `app/build.gradle.kts` names the built APK **`mp3tag-mobile-v<versionName>-debug.apk`** (e.g. `app/build/outputs/apk/debug/mp3tag-mobile-v0.3.1-debug.apk`).
+- `.github/workflows/build.yml`: on every push to `master` (or `v*` tag / manual dispatch), extracts `versionName` & `versionCode` from `app/build.gradle.kts`, builds `mp3tag-mobile-v<versionName>-debug.apk`, uploads it as a workflow artifact, and creates/updates the versioned GitHub Release **`v<versionName>`** (`--latest`) with `mp3tag-mobile-v<versionName>-debug.apk` attached:
+  `https://github.com/areyouanand/mp3tag-mobile/releases/latest`
 - **`app/debug.keystore` is committed** — shared DEBUG signing config for local AND CI builds,
   so all APKs install over each other without uninstalling. Do not git-ignore or delete it;
   it's a debug key only, not a production secret.
-- To re-verify phone updateability over USB (no uninstall needed anymore): `adb install -r <apk>`.
+- To re-verify phone updateability over USB (no uninstall needed anymore): `adb install -r app\build\outputs\apk\debug\mp3tag-mobile-v<versionName>-debug.apk`.
 
 ## Workflow conventions
 

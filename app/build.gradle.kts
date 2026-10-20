@@ -14,6 +14,7 @@ android {
         targetSdk = 36
         versionCode = 5
         versionName = "0.3.1"
+        base.archivesName.set("mp3tag-mobile-v$versionName")
     }
 
     // Shared debug keystore so local and CI builds are inter-installable

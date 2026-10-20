@@ -49,22 +49,22 @@ $env:JAVA_HOME = "$env:LOCALAPPDATA\mp3tag-tooling\jdk-21.0.12.1+1"
 .\gradlew.bat assembleDebug
 ```
 
-The debug APK lands at `app\build\outputs\apk\debug\app-debug.apk` — sideload it onto the phone
+The debug APK lands at `app\build\outputs\apk\debug\mp3tag-mobile-v<versionName>-debug.apk` — sideload it onto the phone
 (open it on the device, or `adb install`). Opening the project root in Android Studio works too;
 it will reuse the SDK via `local.properties`.
 
 ### CI / install from your phone
 
-Every push to `master` runs a GitHub Action that builds the APK and attaches it to a rolling
-prerelease. On the phone, open:
+Every change increments `versionName` and `versionCode` in `app/build.gradle.kts` (and `SettingsScreen.kt`).
+Pushing to `master` runs a GitHub Action that builds the versioned APK (`mp3tag-mobile-v<versionName>-debug.apk`)
+and publishes/updates the corresponding versioned GitHub Release (`v<versionName>`, marked as Latest):
 
 ```
-https://github.com/areyouanand/mp3tag-mobile/releases/latest/download/mp3tag-mobile-debug.apk
+https://github.com/areyouanand/mp3tag-mobile/releases/latest
 ```
 
-(sign in to GitHub, download, then open the APK). All builds — local and CI — sign with the
-committed shared debug keystore, so CI-built APKs install over previously installed versions
-without uninstalling. Versioned releases are created when a `v*` tag is pushed.
+All builds — local and CI — sign with the committed shared debug keystore, so CI-built APKs install
+over previously installed versions without uninstalling.
 
 ## First launch
 
