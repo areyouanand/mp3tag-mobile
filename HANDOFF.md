@@ -13,7 +13,7 @@ Single user, sideloaded, never going to the Play Store.
 - minSdk 31 (Android 12), target/compile SDK 36, AGP 8.13.2, Kotlin 2.4.21, Gradle 8.14.4 (wrapper)
 - Tag engine: **JAudioTagger 3.0.1** (pure Java): MP3 (ID3v1 preserved; v2.3/v2.4 selectable),
   FLAC, M4A/MP4, Ogg Vorbis, **WAV (ID3 + RIFF INFO chunks)**, **DSF (DSD, embedded ID3v2)**
-- versionName 0.3.2 / versionCode 6 (v0.1.0 phase 1, v0.2.1 phase 2, v0.2.2 adaptive UI + hardware scaling, v0.3.0 Home grid + File Manager + Automate, v0.3.1 folder selection + versioned APK/releases, v0.3.2 Theme Screen mode & Design language selector)
+- versionName 0.3.3 / versionCode 7 (v0.1.0 phase 1, v0.2.1 phase 2, v0.2.2 adaptive UI + hardware scaling, v0.3.0 Home grid + File Manager + Automate, v0.3.1 folder selection + versioned APK/releases, v0.3.2 Theme Screen mode & Design language selector, v0.3.3 roadmap cleanup)
 
 ## Locked-in product decisions (do not silently change)
 
@@ -26,7 +26,7 @@ Single user, sideloaded, never going to the Play Store.
 6. **Home Workspace Grid is the app entry point** — launches into 4 grid tiles (`Tag editor`, `File manager`, `Automate`, `Settings`). Only the grid tile for `Settings` is shown on the Home page (no duplicate top-bar gear icon).
 7. **Every change goes under a new release number (`versionName` / `versionCode`)** — bump `versionName` and `versionCode` in `app/build.gradle.kts` (and the version string in `SettingsScreen.kt`), tag `v<versionName>`, and let the GitHub Release + APK filename (`mp3tag-mobile-v<versionName>-debug.apk`) reflect that version.
 
-## Current state (v0.3.2 — everything below is verified working on the device)
+## Current state (v0.3.3 — everything below is verified working on the device)
 
 **Theme: Screen Mode & Design Language** (`ui/theme/Theme.kt`, `ui/settings/SettingsScreen.kt`, `data/prefs/AppPrefs.kt`):
 - Settings → **Theme** section includes two subsections:
@@ -180,9 +180,7 @@ mixed-cover detection. Section sits at the bottom of the editor (user requested)
 ## Roadmap
 
 - **Automate workspace**: user requested the `Automate` section on the Home grid as a placeholder to be populated with automated tagging/file workflows in a future session.
-- **Phase 2 remaining**: tag export/import (CSV) — export selected/folder's tags via SAF
-  CreateDocument, import by filename match. Possibly free-form custom fields
-  (TXXX / Vorbis freeform / MP4 `----:` atoms) beyond the standard catalog.
+- **Free-form custom fields**: possibly support custom tag keys (`TXXX` / Vorbis freeform / MP4 `----:` atoms) beyond the standard ~75-field catalog.
 - **Phase 3**: DFF (DSDIFF) via TagLib 2.x JNI (TagLib 2.0+ supports DSDIFF; latest 2.3.2;
   "Fix building with Android NDK 29" in 2.2 → NDK-supported), Opus, WMA/ASF, APE, WavPack;
   MusicBrainz + Cover Art Archive + Discogs (user still wants local-first until they say otherwise).
