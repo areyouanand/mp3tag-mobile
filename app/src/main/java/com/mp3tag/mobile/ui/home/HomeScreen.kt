@@ -206,8 +206,8 @@ fun HomeScreen(
                 if (isVertical) {
                     LazyColumn(
                         state = listState,
-                        contentPadding = PaddingValues(vertical = 40.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        contentPadding = PaddingValues(vertical = 60.dp),
+                        verticalArrangement = Arrangement.spacedBy(20.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -222,9 +222,9 @@ fun HomeScreen(
                             val distance = itemCenter - viewportCenter
                             val itemSize = itemInfo?.size?.toFloat()?.coerceAtLeast(1f) ?: 240f
                             val normalized = (distance / itemSize).coerceIn(-3f, 3f)
-                            val scale = (1f - abs(normalized) * 0.18f).coerceIn(0.62f, 1f)
-                            val alpha = (1f - abs(normalized) * 0.35f).coerceIn(0.35f, 1f)
-                            val rotation = normalized * 38f
+                            val scale = (1f - abs(normalized) * 0.12f).coerceIn(0.7f, 1f)
+                            val alpha = (1f - abs(normalized) * 0.25f).coerceIn(0.45f, 1f)
+                            val rotation = normalized * 22f
 
                             Surface(
                                 onClick = tile.onClick,
@@ -232,7 +232,7 @@ fun HomeScreen(
                                 color = tile.containerColor,
                                 contentColor = tile.contentColor,
                                 modifier = Modifier
-                                    .size(width = 260.dp, height = 120.dp)
+                                    .size(width = 280.dp, height = 130.dp)
                                     .graphicsLayer {
                                         rotationX = rotation
                                         scaleX = scale
@@ -246,7 +246,7 @@ fun HomeScreen(
                                         .fillMaxSize()
                                         .padding(16.dp),
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(20.dp),
                                 ) {
                                     Surface(
                                         shape = MaterialTheme.shapes.large,
@@ -285,8 +285,8 @@ fun HomeScreen(
                 } else {
                     LazyRow(
                         state = listState,
-                        contentPadding = PaddingValues(horizontal = 40.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        contentPadding = PaddingValues(horizontal = 60.dp),
+                        horizontalArrangement = Arrangement.spacedBy(20.dp),
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(260.dp),
@@ -300,9 +300,9 @@ fun HomeScreen(
                             val distance = itemCenter - viewportCenter
                             val itemWidth = itemInfo?.size?.toFloat()?.coerceAtLeast(1f) ?: 220f
                             val normalized = (distance / itemWidth).coerceIn(-3f, 3f)
-                            val scale = (1f - abs(normalized) * 0.18f).coerceIn(0.62f, 1f)
-                            val alpha = (1f - abs(normalized) * 0.35f).coerceIn(0.35f, 1f)
-                            val rotation = normalized * 38f
+                            val scale = (1f - abs(normalized) * 0.12f).coerceIn(0.7f, 1f)
+                            val alpha = (1f - abs(normalized) * 0.25f).coerceIn(0.45f, 1f)
+                            val rotation = normalized * 22f
 
                             Surface(
                                 onClick = tile.onClick,
@@ -310,7 +310,7 @@ fun HomeScreen(
                                 color = tile.containerColor,
                                 contentColor = tile.contentColor,
                                 modifier = Modifier
-                                    .size(width = 220.dp, height = 240.dp)
+                                    .size(width = 240.dp, height = 260.dp)
                                     .graphicsLayer {
                                         rotationY = rotation
                                         scaleX = scale

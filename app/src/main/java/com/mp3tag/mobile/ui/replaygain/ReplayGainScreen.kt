@@ -3,6 +3,8 @@ package com.mp3tag.mobile.ui.replaygain
 import android.app.Application
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -51,7 +53,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.LinkedHashSet
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun ReplayGainScreen(onBack: () -> Unit) {
     val context = LocalContext.current
@@ -102,7 +104,7 @@ fun ReplayGainScreen(onBack: () -> Unit) {
         ) {
             Text("Folder: ${currentDir.absolutePath}", maxLines = 1, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TextButton(onClick = {
                     selectedPaths = audioFiles.map { it.absolutePath }.toSet()
                     selectedFolderPaths = dirs.map { it.absolutePath }.toSet()
@@ -112,10 +114,9 @@ fun ReplayGainScreen(onBack: () -> Unit) {
                     selectedFolderPaths = emptySet()
                 }) { Text("Clear") }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
                     onClick = {
-                        // Analyze entire current folder recursively
                         analyzing = true
                         status = null
                         scope.launch {
@@ -135,7 +136,6 @@ fun ReplayGainScreen(onBack: () -> Unit) {
                 ) { Text("Analyze folder") }
                 Button(
                     onClick = {
-                        // Analyze selected files/folders
                         resolving = true
                         scope.launch {
                             val resolved = withContext(Dispatchers.IO) {
