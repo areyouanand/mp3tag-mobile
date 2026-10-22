@@ -120,8 +120,12 @@ private fun formatSelectionSummary(state: BrowserState): String {
 fun BrowserScreen(
     onBackHome: () -> Unit,
     onEditFiles: (List<String>) -> Unit,
-    onOpenSettings: () -> Unit,
+    onOpenSettings: (() -> Unit)? = null,
     viewModel: BrowserViewModel = viewModel(),
+    actionLabel: String = "Edit",
+    actionIcon: androidx.compose.ui.graphics.vector.ImageVector = Icons.Filled.Edit,
+    folderActionLabel: String = "Edit all audio in this folder",
+    hintText: String = "Tap to select · long-press a file to edit it",
 ) {
     val state by viewModel.state.collectAsState()
     val windowInfo = rememberAdaptiveWindowInfo()
@@ -200,8 +204,10 @@ fun BrowserScreen(
                                 Icon(Icons.Filled.Close, contentDescription = "Clear selection")
                             }
                         }
-                        IconButton(onClick = onOpenSettings) {
-                            Icon(Icons.Filled.Settings, contentDescription = "Settings")
+                        if (onOpenSettings != null) {
+                            IconButton(onClick = onOpenSettings) {
+                                Icon(Icons.Filled.Settings, contentDescription = "Settings")
+                            }
                         }
                     }
                     IconButton(onClick = viewModel::refresh) {
@@ -240,9 +246,9 @@ fun BrowserScreen(
                             onClick = triggerEditSelected,
                             enabled = !state.resolvingSelection,
                         ) {
-                            Icon(Icons.Filled.Edit, contentDescription = null)
+                            Icon(actionIcon, contentDescription = null)
                             Spacer(Modifier.width(6.dp))
-                            Text("Edit")
+                            Text(actionLabel)
                         }
                     }
                 }
@@ -265,6 +271,8 @@ fun BrowserScreen(
                         onOpenDir = { viewModel.open(it) },
                         onClearSelection = viewModel::clearSelection,
                         onEditSelected = triggerEditSelected,
+                        actionLabel = actionLabel,
+                        actionIcon = actionIcon,
                         modifier = Modifier
                             .width(windowInfo.sidePaneWidth)
                             .fillMaxHeight(),
@@ -283,6 +291,7 @@ fun BrowserScreen(
                             folderCount = filteredDirs.size,
                             fileCount = filteredFiles.size,
                             hasSelection = hasSelection,
+                            hintText = hintText,
                         )
                         Box(
                             modifier = Modifier
@@ -354,6 +363,7 @@ fun BrowserScreen(
                         folderCount = filteredDirs.size,
                         fileCount = filteredFiles.size,
                         hasSelection = hasSelection,
+                        hintText = hintText,
                     )
 
                     Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -414,8 +424,8 @@ fun BrowserScreen(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
                 )
                 ListItem(
-                    headlineContent = { Text("Edit all audio in this folder") },
-                    leadingContent = { Icon(Icons.Filled.Edit, contentDescription = null) },
+                    headlineContent = { Text(folderActionLabel) },
+                    leadingContent = { Icon(actionIcon, contentDescription = null) },
                     modifier = Modifier.clickable {
                         menuSheetOpen = false
                         viewModel.editEntireFolder(state.directory, onEditFiles)
@@ -445,14 +455,16 @@ fun BrowserScreen(
                         storageDialogOpen = true
                     },
                 )
-                ListItem(
-                    headlineContent = { Text("Settings") },
-                    leadingContent = { Icon(Icons.Filled.Settings, contentDescription = null) },
-                    modifier = Modifier.clickable {
-                        menuSheetOpen = false
-                        onOpenSettings()
-                    },
-                )
+                if (onOpenSettings != null) {
+                    ListItem(
+                        headlineContent = { Text("Settings") },
+                        leadingContent = { Icon(Icons.Filled.Settings, contentDescription = null) },
+                        modifier = Modifier.clickable {
+                            menuSheetOpen = false
+                            onOpenSettings()
+                        },
+                    )
+                }
                 ListItem(
                     headlineContent = { Text("Back to Home") },
                     leadingContent = { Icon(Icons.Filled.Home, contentDescription = null) },
@@ -512,6 +524,7 @@ private fun FolderSummary(
     folderCount: Int,
     fileCount: Int,
     hasSelection: Boolean,
+    hintText: String = "Tap to select · long-press a file to edit it",
 ) {
     Column(
         modifier = Modifier
@@ -527,7 +540,7 @@ private fun FolderSummary(
         )
         if (!hasSelection && fileCount > 0) {
             Text(
-                text = "Tap to select · long-press a file to edit it",
+                text = hintText,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.outline,
                 maxLines = 1,
@@ -574,6 +587,8 @@ private fun BrowserSidePane(
     onOpenDir: (File) -> Unit,
     onClearSelection: () -> Unit,
     onEditSelected: () -> Unit,
+    actionLabel: String = "Edit",
+    actionIcon: androidx.compose.ui.graphics.vector.ImageVector = Icons.Filled.Edit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -611,9 +626,9 @@ private fun BrowserSidePane(
                             enabled = !state.resolvingSelection,
                             modifier = Modifier.weight(1f),
                         ) {
-                            Icon(Icons.Filled.Edit, contentDescription = null)
+                            Icon(actionIcon, contentDescription = null)
                             Spacer(Modifier.width(6.dp))
-                            Text("Edit")
+                            Text(actionLabel)
                         }
                         TextButton(onClick = onClearSelection) {
                             Text("Clear")

@@ -12,8 +12,8 @@ android {
         applicationId = "com.mp3tag.mobile"
         minSdk = 31          // Android 12
         targetSdk = 36
-        versionCode = 19
-        versionName = "0.5.8"
+        versionCode = 20
+        versionName = "0.5.9"
         base.archivesName.set("mp3tag-mobile-v$versionName")
     }
 

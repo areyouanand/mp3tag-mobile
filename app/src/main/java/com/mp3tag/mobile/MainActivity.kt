@@ -232,6 +232,7 @@ fun Mp3tagApp(appViewModel: AppViewModel = viewModel()) {
 
                 Screen.ReplayGain -> ReplayGainScreen(
                     onBack = appViewModel::openHome,
+                    onOpenSettings = { appViewModel.openSettings(Screen.ReplayGain) },
                 )
 
                 Screen.Browser -> BrowserScreen(
