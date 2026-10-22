@@ -24,6 +24,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -68,6 +69,10 @@ fun ReplayGainScreen(onBack: () -> Unit) {
     var tracks by remember { mutableStateOf<List<TrackLoudness>>(emptyList()) }
     var albumGain by remember { mutableStateOf<Double?>(null) }
     var analyzing by remember { mutableStateOf(false) }
+    var progressCurrent by remember { mutableStateOf(0) }
+    var progressTotal by remember { mutableStateOf(0) }
+    var writeTrackGain by remember { mutableStateOf(true) }
+    var writeAlbumGain by remember { mutableStateOf(true) }
     var applying by remember { mutableStateOf(false) }
     var resolving by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf<String?>(null) }
@@ -103,6 +108,14 @@ fun ReplayGainScreen(onBack: () -> Unit) {
                 .padding(16.dp),
         ) {
             Text("Folder: ${currentDir.absolutePath}", maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (analyzing && progressTotal > 0) {
+                Spacer(Modifier.height(8.dp))
+                LinearProgressIndicator(
+                    progress = { progressCurrent.toFloat() / progressTotal.toFloat() },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text("Analyzing $progressCurrent / $progressTotal", style = androidx.compose.material3.MaterialTheme.typography.bodySmall)
+            }
             Spacer(Modifier.height(8.dp))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TextButton(onClick = {
@@ -119,15 +132,22 @@ fun ReplayGainScreen(onBack: () -> Unit) {
                     onClick = {
                         analyzing = true
                         status = null
+                        tracks = emptyList()
+                        progressCurrent = 0
                         scope.launch {
-                            val result = withContext(Dispatchers.IO) {
-                                val files = FolderScanner.collectAudioFilesRecursively(currentDir)
-                                val list = files.mapNotNull { LoudnessAnalyzer.analyzeFile(context, it) }
-                                val album = if (list.isNotEmpty()) list.map { it.gainDb }.average() else null
-                                Pair(list, album)
+                            val files = withContext(Dispatchers.IO) { FolderScanner.collectAudioFilesRecursively(currentDir) }
+                            progressTotal = files.size
+                            val list = mutableListOf<TrackLoudness>()
+                            withContext(Dispatchers.IO) {
+                                files.forEachIndexed { idx, f ->
+                                    LoudnessAnalyzer.analyzeFile(context, f)?.let { list.add(it) }
+                                    withContext(Dispatchers.Main) {
+                                        progressCurrent = idx + 1
+                                        tracks = list.toList()
+                                        albumGain = if (list.isNotEmpty()) list.map { it.gainDb }.average() else null
+                                    }
+                                }
                             }
-                            tracks = result.first
-                            albumGain = result.second
                             analyzing = false
                             status = "Analyzed ${tracks.size} file(s)"
                         }
@@ -151,14 +171,20 @@ fun ReplayGainScreen(onBack: () -> Unit) {
                                 status = "No supported audio files in selection"
                             } else {
                                 analyzing = true
-                                val result = withContext(Dispatchers.IO) {
-                                    val files = resolved.map { File(it) }
-                                    val list = files.mapNotNull { LoudnessAnalyzer.analyzeFile(context, it) }
-                                    val album = if (list.isNotEmpty()) list.map { it.gainDb }.average() else null
-                                    Pair(list, album)
+                                tracks = emptyList()
+                                progressCurrent = 0
+                                progressTotal = resolved.size
+                                val list = mutableListOf<TrackLoudness>()
+                                withContext(Dispatchers.IO) {
+                                    resolved.forEachIndexed { idx, path ->
+                                        LoudnessAnalyzer.analyzeFile(context, File(path))?.let { list.add(it) }
+                                        withContext(Dispatchers.Main) {
+                                            progressCurrent = idx + 1
+                                            tracks = list.toList()
+                                            albumGain = if (list.isNotEmpty()) list.map { it.gainDb }.average() else null
+                                        }
+                                    }
                                 }
-                                tracks = result.first
-                                albumGain = result.second
                                 analyzing = false
                                 status = "Analyzed ${tracks.size} file(s)"
                             }
@@ -175,11 +201,15 @@ fun ReplayGainScreen(onBack: () -> Unit) {
                                 tracks.forEach { t ->
                                     val file = File(t.path)
                                     val customFields = mutableMapOf<String, String>()
-                                    customFields["REPLAYGAIN_TRACK_GAIN"] = "%.2f dB".format(t.gainDb)
-                                    customFields["REPLAYGAIN_TRACK_PEAK"] = "%.6f".format(Math.pow(10.0, t.peakDb / 20.0))
-                                    albumGain?.let {
-                                        customFields["REPLAYGAIN_ALBUM_GAIN"] = "%.2f dB".format(it)
-                                        customFields["REPLAYGAIN_ALBUM_PEAK"] = "%.6f".format(tracks.maxOfOrNull { tr -> Math.pow(10.0, tr.peakDb / 20.0) } ?: 1.0)
+                                    if (writeTrackGain) {
+                                        customFields["REPLAYGAIN_TRACK_GAIN"] = "%.2f dB".format(t.gainDb)
+                                        customFields["REPLAYGAIN_TRACK_PEAK"] = "%.6f".format(Math.pow(10.0, t.peakDb / 20.0))
+                                    }
+                                    if (writeAlbumGain) {
+                                        albumGain?.let {
+                                            customFields["REPLAYGAIN_ALBUM_GAIN"] = "%.2f dB".format(it)
+                                            customFields["REPLAYGAIN_ALBUM_PEAK"] = "%.6f".format(tracks.maxOfOrNull { tr -> Math.pow(10.0, tr.peakDb / 20.0) } ?: 1.0)
+                                        }
                                     }
                                     TagEngine.write(
                                         file = file,
@@ -194,6 +224,16 @@ fun ReplayGainScreen(onBack: () -> Unit) {
                     },
                     enabled = !analyzing && !applying && !resolving && tracks.isNotEmpty(),
                 ) { Text("Apply tags") }
+            }
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = writeTrackGain, onCheckedChange = { writeTrackGain = it })
+                    Text("Track gain")
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = writeAlbumGain, onCheckedChange = { writeAlbumGain = it })
+                    Text("Album gain")
+                }
             }
             if (analyzing || applying || resolving) {
                 Spacer(Modifier.height(8.dp))

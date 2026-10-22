@@ -379,29 +379,6 @@ fun HomeScreen(
                 }
 
                 Spacer(Modifier.height(24.dp))
-                Text(
-                    text = centeredTile.title,
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Text(
-                    text = centeredTile.subtitle,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier
-                        .padding(horizontal = 32.dp)
-                        .widthIn(max = 520.dp),
-                )
-                if (!hasScrolled) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        text = "Swipe to browse",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
             }
         }
     }
