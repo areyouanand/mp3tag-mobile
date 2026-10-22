@@ -252,6 +252,9 @@ fun Mp3tagApp(appViewModel: AppViewModel = viewModel()) {
                         browserVm.refresh()
                         fileManagerVm.refresh()
                     },
+                    onOpenSingleFile = { path ->
+                        appViewModel.openEditor(listOf(path), current.returnTo)
+                    },
                 )
 
                 is Screen.Settings -> SettingsScreen(

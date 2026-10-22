@@ -61,6 +61,9 @@ data class EditorState(
     val valueOptions: Map<FieldKey, List<String>> = emptyMap(),
     val perFileOverrides: Map<FieldKey, Map<String, String>> = emptyMap(),
     val excludedPaths: Set<String> = emptySet(),
+    val undoAvailable: Boolean = false,
+    val redoAvailable: Boolean = false,
+    val keptPaths: Set<String> = emptySet(),
     val cover: CoverImage? = null,
     val coverMixed: Boolean = false,
     val pendingCover: CoverImage? = null,
@@ -83,14 +86,73 @@ data class EditorState(
 }
 
 class EditorViewModel(
-    paths: List<String>,
+    private val paths: List<String>,
     application: Application,
 ) : AndroidViewModel(application) {
 
     private val prefs = AppPrefs(application)
+    private val draftStore = EditorDraftStore(application)
 
     private val _state = MutableStateFlow(EditorState(paths = paths))
     val state: StateFlow<EditorState> = _state.asStateFlow()
+
+    // Undo / redo history (in-memory; not persisted across process death).
+    private data class EditSnapshot(
+        val perFileOverrides: Map<FieldKey, Map<String, String>>,
+        val excludedPaths: Set<String>,
+        val extraKeys: List<FieldKey>,
+        val pendingCover: CoverImage?,
+        val coverRemoveRequested: Boolean,
+    )
+
+    private val undoStack = ArrayDeque<EditSnapshot>()
+    private val redoStack = ArrayDeque<EditSnapshot>()
+
+    private fun currentSnapshot(): EditSnapshot = EditSnapshot(
+        perFileOverrides = _state.value.perFileOverrides,
+        excludedPaths = _state.value.excludedPaths,
+        extraKeys = _state.value.extraKeys,
+        pendingCover = _state.value.pendingCover,
+        coverRemoveRequested = _state.value.coverRemoveRequested,
+    )
+
+    private fun pushUndo() {
+        undoStack.addLast(currentSnapshot())
+        if (undoStack.size > 50) undoStack.removeFirst()
+        redoStack.clear()
+        syncAvailability()
+    }
+
+    private fun syncAvailability() {
+        _state.update { it.copy(undoAvailable = undoStack.isNotEmpty(), redoAvailable = redoStack.isNotEmpty()) }
+    }
+
+    fun undo() {
+        if (undoStack.isEmpty()) return
+        redoStack.addLast(currentSnapshot())
+        val snap = undoStack.removeLast()
+        restoreSnapshot(snap)
+        syncAvailability()
+    }
+
+    fun redo() {
+        if (redoStack.isEmpty()) return
+        undoStack.addLast(currentSnapshot())
+        val snap = redoStack.removeLast()
+        restoreSnapshot(snap)
+        syncAvailability()
+    }
+
+    private fun restoreSnapshot(snap: EditSnapshot) {
+        _state.update { current ->
+            current.buildFrom(current.snapshots, snap.extraKeys, snap.perFileOverrides, snap.excludedPaths)
+                .copy(
+                    pendingCover = snap.pendingCover,
+                    coverRemoveRequested = snap.coverRemoveRequested,
+                    keptPaths = emptySet(),
+                )
+        }
+    }
 
     // ------------------------------------------------------------------
     // Saved rename/tag patterns (MP3Tag-style pattern library)
@@ -107,15 +169,43 @@ class EditorViewModel(
     }
 
     init {
+        // Restore any persisted draft (survives process death / app kill).
+        draftStore.load(paths)?.let { draft ->
+            _state.update {
+                it.copy(
+                    perFileOverrides = draft.perFileOverrides,
+                    excludedPaths = draft.excludedPaths,
+                    extraKeys = draft.extraKeys,
+                    pendingCover = draft.pendingCover,
+                )
+            }
+        }
         reload()
+        // Persist draft on every state change.
+        viewModelScope.launch {
+            state.collect { s ->
+                if (!s.loading && !s.saving) {
+                    draftStore.save(
+                        paths = paths,
+                        perFileOverrides = s.perFileOverrides,
+                        excludedPaths = s.excludedPaths,
+                        extraKeys = s.extraKeys,
+                        pendingCover = s.pendingCover,
+                    )
+                }
+            }
+        }
     }
 
     /** Shows an additional field row (e.g. a tag found in the selected files). */
-    fun addField(key: FieldKey) = _state.update { current ->
-        if (key in current.displayedKeys) {
-            current
-        } else {
-            current.buildFrom(current.snapshots, current.extraKeys + key)
+    fun addField(key: FieldKey) {
+        pushUndo()
+        _state.update { current ->
+            if (key in current.displayedKeys) {
+                current
+            } else {
+                current.buildFrom(current.snapshots, current.extraKeys + key)
+            }
         }
     }
 
@@ -143,7 +233,9 @@ class EditorViewModel(
                         coverRemoveRequested = false,
                         outcomes = null,
                         excludedPaths = emptySet(),
+                        keptPaths = emptySet(),
                     )
+                    draftStore.clear(paths)
                 }
                 updated
             }
@@ -158,7 +250,9 @@ class EditorViewModel(
      * Applies tags parsed from file names. Each file gets its own values,
      * stored as per-file overrides that Save writes to disk.
      */
-    fun applyParsedTags(entries: List<Pair<String, Map<FieldKey, String>>>) = _state.update { current ->
+    fun applyParsedTags(entries: List<Pair<String, Map<FieldKey, String>>>) {
+        pushUndo()
+        _state.update { current ->
         var overrides = current.perFileOverrides
         for ((path, values) in entries) {
             values.forEach { (key, value) ->
@@ -167,14 +261,18 @@ class EditorViewModel(
         }
         current.buildFrom(current.snapshots, current.extraKeys, overrides)
     }
+    }
 
     /** Applies a batch transform (regex/case) result per file. */
-    fun applyTransforms(transforms: List<Triple<String, FieldKey, String>>) = _state.update { current ->
+    fun applyTransforms(transforms: List<Triple<String, FieldKey, String>>) {
+        pushUndo()
+        _state.update { current ->
         var overrides = current.perFileOverrides
         for ((path, key, value) in transforms) {
             overrides = overrides + (key to ((overrides[key] ?: emptyMap()) + (path to value)))
         }
         current.buildFrom(current.snapshots, current.extraKeys, overrides)
+    }
     }
 
     /** Renames the selected files according to a tag-based pattern. */
@@ -237,7 +335,9 @@ class EditorViewModel(
         }
     }
 
-    fun onFieldChange(key: FieldKey, value: String) = _state.update { current ->
+    fun onFieldChange(key: FieldKey, value: String) {
+        pushUndo()
+        _state.update { current ->
         val included = current.includedSnapshots
         if (included.isEmpty()) return@update current
         // Cache the edit per file: only the files included NOW receive this change,
@@ -248,9 +348,12 @@ class EditorViewModel(
         }
         current.buildFrom(current.snapshots, current.extraKeys, overrides)
     }
+    }
 
     /** Explicit "clear this field" for the currently included files. */
-    fun onFieldClear(key: FieldKey) = _state.update { current ->
+    fun onFieldClear(key: FieldKey) {
+        pushUndo()
+        _state.update { current ->
         val included = current.includedSnapshots
         if (included.isEmpty()) return@update current
         var overrides = current.perFileOverrides
@@ -259,11 +362,16 @@ class EditorViewModel(
         }
         current.buildFrom(current.snapshots, current.extraKeys, overrides)
     }
+    }
 
     /** Throws away all cached (unsaved) changes. */
-    fun discardChanges() = _state.update { current ->
-        current.buildFrom(current.snapshots, current.extraKeys, perFileOverrides = emptyMap())
-            .copy(pendingCover = null, coverRemoveRequested = false)
+    fun discardChanges() {
+        pushUndo()
+        _state.update { current ->
+            current.buildFrom(current.snapshots, current.extraKeys, perFileOverrides = emptyMap())
+                .copy(pendingCover = null, coverRemoveRequested = false, keptPaths = emptySet())
+        }
+        draftStore.clear(paths)
     }
 
     fun onCoverPicked(uri: Uri) {
@@ -285,14 +393,21 @@ class EditorViewModel(
                 }.getOrNull()
             }
             if (cover != null) {
+                pushUndo()
                 _state.update { it.copy(pendingCover = cover, coverRemoveRequested = false) }
             }
         }
     }
 
-    fun onCoverRemove() = _state.update { it.copy(coverRemoveRequested = true, pendingCover = null) }
+    fun onCoverRemove() {
+        pushUndo()
+        _state.update { it.copy(coverRemoveRequested = true, pendingCover = null) }
+    }
 
-    fun onCoverUndo() = _state.update { it.copy(pendingCover = null, coverRemoveRequested = false) }
+    fun onCoverUndo() {
+        pushUndo()
+        _state.update { it.copy(pendingCover = null, coverRemoveRequested = false) }
+    }
 
     fun save() {
         val current = _state.value
@@ -361,6 +476,7 @@ class EditorViewModel(
             val keptOverrides = current.perFileOverrides
                 .mapValues { (_, byPath) -> byPath.filterKeys { it !in writtenPaths } }
                 .filterValues { it.isNotEmpty() }
+            val keptPaths = keptOverrides.values.flatMap { it.keys }.toSet()
             // Re-read from disk so the editor shows the persisted state.
             val snapshots = readAll(current.snapshots.map { it.path })
             _state.update {
@@ -370,12 +486,15 @@ class EditorViewModel(
                     outcomes = outcomes,
                     pendingCover = null,
                     coverRemoveRequested = false,
+                    keptPaths = keptPaths,
                 )
             }
+            // Clear the draft if nothing pending remains.
+            if (keptPaths.isEmpty()) draftStore.clear(paths)
         }
     }
 
-    fun dismissOutcomes() = _state.update { it.copy(outcomes = null) }
+    fun dismissOutcomes() = _state.update { it.copy(outcomes = null, keptPaths = emptySet()) }
 
     /**
      * Reads all [paths] on [Dispatchers.IO] with hardware-scaled bounded parallelism
@@ -514,22 +633,31 @@ class EditorViewModel(
     }
 
     /** Includes/excludes a file from the current edit session (MP3Tag-style selection). */
-    fun toggleFileIncluded(path: String) = _state.update { current ->
-        val excluded = current.excludedPaths.toMutableSet()
-        if (!excluded.add(path)) excluded.remove(path)
-        current.buildFrom(current.snapshots, current.extraKeys, excludedPaths = excluded)
+    fun toggleFileIncluded(path: String) {
+        pushUndo()
+        _state.update { current ->
+            val excluded = current.excludedPaths.toMutableSet()
+            if (!excluded.add(path)) excluded.remove(path)
+            current.buildFrom(current.snapshots, current.extraKeys, excludedPaths = excluded)
+        }
     }
 
-    fun includeAllFiles() = _state.update { current ->
-        current.buildFrom(current.snapshots, current.extraKeys, excludedPaths = emptySet())
+    fun includeAllFiles() {
+        pushUndo()
+        _state.update { current ->
+            current.buildFrom(current.snapshots, current.extraKeys, excludedPaths = emptySet())
+        }
     }
 
-    fun excludeAllFiles() = _state.update { current ->
-        current.buildFrom(
-            current.snapshots,
-            current.extraKeys,
-            excludedPaths = current.snapshots.map { it.path }.toSet(),
-        )
+    fun excludeAllFiles() {
+        pushUndo()
+        _state.update { current ->
+            current.buildFrom(
+                current.snapshots,
+                current.extraKeys,
+                excludedPaths = current.snapshots.map { it.path }.toSet(),
+            )
+        }
     }
 
     companion object {

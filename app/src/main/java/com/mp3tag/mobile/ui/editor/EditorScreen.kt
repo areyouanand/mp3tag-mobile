@@ -52,6 +52,8 @@ import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.TextFields
+import androidx.compose.material.icons.automirrored.filled.Undo
+import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -226,6 +228,7 @@ fun EditorScreen(
     sessionKey: String,
     onDone: () -> Unit,
     onFilesRenamed: () -> Unit = {},
+    onOpenSingleFile: (String) -> Unit = {},
 ) {
     val app = LocalContext.current.applicationContext as Application
     val vm: EditorViewModel = viewModel(
@@ -293,6 +296,18 @@ fun EditorScreen(
                     }
                 },
                 actions = {
+                    IconButton(
+                        onClick = vm::undo,
+                        enabled = state.undoAvailable && !state.saving,
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = "Undo")
+                    }
+                    IconButton(
+                        onClick = vm::redo,
+                        enabled = state.redoAvailable && !state.saving,
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.Redo, contentDescription = "Redo")
+                    }
                     IconButton(
                         onClick = { toolsSheetOpen = true },
                         enabled = !state.saving,
@@ -459,6 +474,30 @@ fun EditorScreen(
             },
             text = {
                 Column(Modifier.verticalScroll(rememberScrollState())) {
+                    if (state.keptPaths.isNotEmpty()) {
+                        Text(
+                            text = "Pending edits kept for ${state.keptPaths.size} file(s) not saved:",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        state.keptPaths.take(8).forEach { p ->
+                            Text(
+                                text = "• ${File(p).name}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        if (state.keptPaths.size > 8) {
+                            Text(
+                                text = "…and ${state.keptPaths.size - 8} more",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Spacer(Modifier.height(8.dp))
+                    }
                     outcomes.forEach { outcome ->
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -684,7 +723,15 @@ fun EditorScreen(
                                 Icon(Icons.Filled.MusicNote, contentDescription = null)
                             },
                             trailingContent = {
-                                Checkbox(checked = included, onCheckedChange = null)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    TextButton(onClick = {
+                                        filesSheetOpen = false
+                                        onOpenSingleFile(snapshot.path)
+                                    }) {
+                                        Text("Edit")
+                                    }
+                                    Checkbox(checked = included, onCheckedChange = null)
+                                }
                             },
                             modifier = Modifier.clickable { vm.toggleFileIncluded(snapshot.path) },
                         )
