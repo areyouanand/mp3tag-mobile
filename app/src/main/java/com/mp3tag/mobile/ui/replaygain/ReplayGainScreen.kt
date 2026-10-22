@@ -1,6 +1,7 @@
 package com.mp3tag.mobile.ui.replaygain
 
 import android.app.Application
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,12 +14,15 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -40,27 +44,36 @@ import com.mp3tag.mobile.data.replaygain.TrackLoudness
 import com.mp3tag.mobile.data.tag.TagEngine
 import com.mp3tag.mobile.data.tag.WriteOptions
 import com.mp3tag.mobile.data.tag.WriteRequest
-import com.mp3tag.mobile.util.DeviceProfile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-
 import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReplayGainScreen(onBack: () -> Unit) {
     val context = LocalContext.current
-    val app = context.applicationContext as Application
     val prefs = remember { AppPrefs(context) }
     val scope = rememberCoroutineScope()
 
-    var folderPath by remember { mutableStateOf(prefs.lastFolder ?: "") }
+    var currentDir by remember { mutableStateOf(prefs.lastFolder?.let(::File)?.takeIf { it.exists() && it.isDirectory } ?: File("/storage/emulated/0")) }
+    var dirs by remember { mutableStateOf<List<File>>(emptyList()) }
+    var audioFiles by remember { mutableStateOf<List<File>>(emptyList()) }
     var tracks by remember { mutableStateOf<List<TrackLoudness>>(emptyList()) }
     var albumGain by remember { mutableStateOf<Double?>(null) }
     var analyzing by remember { mutableStateOf(false) }
     var applying by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf<String?>(null) }
+
+    fun load(dir: File) {
+        val listing = FolderScanner.list(dir)
+        dirs = listing.directories
+        audioFiles = listing.audioFiles
+        currentDir = dir
+        prefs.lastFolder = dir.absolutePath
+    }
+
+    remember { load(currentDir) }
 
     Scaffold(
         topBar = {
@@ -80,13 +93,7 @@ fun ReplayGainScreen(onBack: () -> Unit) {
                 .padding(padding)
                 .padding(16.dp),
         ) {
-            OutlinedTextField(
-                value = folderPath,
-                onValueChange = { folderPath = it },
-                label = { Text("Folder path") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-            )
+            Text("Folder: ${currentDir.absolutePath}", maxLines = 1, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
@@ -95,13 +102,9 @@ fun ReplayGainScreen(onBack: () -> Unit) {
                         status = null
                         scope.launch {
                             val result = withContext(Dispatchers.IO) {
-                                val dir = File(folderPath)
-                                val files = FolderScanner.collectAudioFilesRecursively(dir)
+                                val files = FolderScanner.collectAudioFilesRecursively(currentDir)
                                 val list = files.mapNotNull { LoudnessAnalyzer.analyzeFile(context, it) }
-                                val album = if (list.isNotEmpty()) {
-                                    // Approximate album gain from average of track gains.
-                                    list.map { it.gainDb }.average()
-                                } else null
+                                val album = if (list.isNotEmpty()) list.map { it.gainDb }.average() else null
                                 Pair(list, album)
                             }
                             tracks = result.first
@@ -110,8 +113,8 @@ fun ReplayGainScreen(onBack: () -> Unit) {
                             status = "Analyzed ${tracks.size} file(s)"
                         }
                     },
-                    enabled = !analyzing && !applying && folderPath.isNotBlank(),
-                ) { Text("Analyze") }
+                    enabled = !analyzing && !applying,
+                ) { Text("Analyze this folder") }
                 Button(
                     onClick = {
                         applying = true
@@ -129,7 +132,7 @@ fun ReplayGainScreen(onBack: () -> Unit) {
                                     }
                                     TagEngine.write(
                                         file = file,
-                                        request = com.mp3tag.mobile.data.tag.WriteRequest(customFields = customFields),
+                                        request = WriteRequest(customFields = customFields),
                                         options = options,
                                     )
                                 }
@@ -149,10 +152,34 @@ fun ReplayGainScreen(onBack: () -> Unit) {
                 Spacer(Modifier.height(8.dp))
                 Text(it)
             }
+            albumGain?.let {
+                Spacer(Modifier.height(4.dp))
+                Text("Album gain: %.2f dB".format(it))
+            }
             Spacer(Modifier.height(8.dp))
-            albumGain?.let { Text("Album gain: %.2f dB".format(it)) }
-            Spacer(Modifier.height(8.dp))
-            LazyColumn(Modifier.fillMaxSize()) {
+            LazyColumn(Modifier.weight(1f)) {
+                if (currentDir.parentFile != null && currentDir.parentFile?.canRead() == true) {
+                    item {
+                        ListItem(
+                            headlineContent = { Text("..") },
+                            leadingContent = { Icon(Icons.Filled.Folder, contentDescription = null) },
+                            modifier = Modifier.clickable { load(currentDir.parentFile!!) },
+                        )
+                    }
+                }
+                items(dirs) { d ->
+                    ListItem(
+                        headlineContent = { Text(d.name) },
+                        leadingContent = { Icon(Icons.Filled.Folder, contentDescription = null) },
+                        modifier = Modifier.clickable { load(d) },
+                    )
+                }
+                items(audioFiles) { f ->
+                    ListItem(
+                        headlineContent = { Text(f.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                        leadingContent = { Icon(Icons.Filled.MusicNote, contentDescription = null) },
+                    )
+                }
                 items(tracks) { t ->
                     Column(Modifier.padding(vertical = 4.dp)) {
                         Text(File(t.path).name, maxLines = 1, overflow = TextOverflow.Ellipsis)

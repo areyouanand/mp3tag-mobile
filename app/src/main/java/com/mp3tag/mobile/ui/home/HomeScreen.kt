@@ -1,5 +1,6 @@
 package com.mp3tag.mobile.ui.home
 
+import android.content.res.Configuration
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,6 +19,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
@@ -43,6 +45,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -75,6 +78,7 @@ fun HomeScreen(
     val windowInfo = rememberAdaptiveWindowInfo()
     val scheme = MaterialTheme.colorScheme
     val density = LocalDensity.current
+    val isVertical = LocalConfiguration.current.orientation == Configuration.ORIENTATION_PORTRAIT
 
     val tiles = listOf(
         HomeTileItem(
@@ -146,11 +150,24 @@ fun HomeScreen(
     val centeredIndex by remember {
         derivedStateOf {
             val info = listState.layoutInfo
-            val viewportCenter = info.viewportStartOffset + info.viewportSize.width / 2f
-            info.visibleItemsInfo.minByOrNull { abs((it.offset + it.size / 2f) - viewportCenter) }?.index ?: startIndex
+            val viewportCenter = if (isVertical) {
+                info.viewportStartOffset + info.viewportSize.height / 2f
+            } else {
+                info.viewportStartOffset + info.viewportSize.width / 2f
+            }
+            info.visibleItemsInfo.minByOrNull {
+                val center = if (isVertical) it.offset + it.size / 2f else it.offset + it.size / 2f
+                abs(center - viewportCenter)
+            }?.index ?: startIndex
         }
     }
     val centeredTile = tiles[centeredIndex % tiles.size]
+
+    val hasScrolled by remember {
+        derivedStateOf {
+            listState.firstVisibleItemIndex != startIndex || listState.firstVisibleItemScrollOffset != 0
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -185,97 +202,176 @@ fun HomeScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Spacer(Modifier.height(24.dp))
-                LazyRow(
-                    state = listState,
-                    contentPadding = PaddingValues(horizontal = 40.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(260.dp),
-                ) {
-                    items(
-                        count = totalItems,
-                        key = { it },
-                    ) { index ->
-                        val tile = tiles[index % tiles.size]
-                        val itemInfo = listState.layoutInfo.visibleItemsInfo.find { it.key == index }
-                        val viewportCenter = listState.layoutInfo.viewportStartOffset +
-                            listState.layoutInfo.viewportSize.width / 2f
-                        val itemCenter = itemInfo?.let { it.offset + it.size / 2f } ?: viewportCenter
-                        val distance = itemCenter - viewportCenter
-                        val itemWidth = itemInfo?.size?.toFloat()?.coerceAtLeast(1f) ?: 220f
-                        val normalized = (distance / itemWidth).coerceIn(-3f, 3f)
-                        val scale = (1f - abs(normalized) * 0.18f).coerceIn(0.62f, 1f)
-                        val alpha = (1f - abs(normalized) * 0.35f).coerceIn(0.35f, 1f)
-                        val rotation = normalized * 38f
 
-                        Surface(
-                            onClick = tile.onClick,
-                            shape = MaterialTheme.shapes.extraLarge,
-                            color = tile.containerColor,
-                            contentColor = tile.contentColor,
-                            modifier = Modifier
-                                .size(width = 220.dp, height = 240.dp)
-                                .graphicsLayer {
-                                    rotationY = rotation
-                                    scaleX = scale
-                                    scaleY = scale
-                                    this.alpha = alpha
-                                    cameraDistance = 16f * density.density
-                                },
-                        ) {
-                            Column(
+                if (isVertical) {
+                    LazyColumn(
+                        state = listState,
+                        contentPadding = PaddingValues(vertical = 40.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                    ) {
+                        items(count = totalItems, key = { it }) { index ->
+                            val tile = tiles[index % tiles.size]
+                            val itemInfo = listState.layoutInfo.visibleItemsInfo.find { it.key == index }
+                            val viewportCenter = listState.layoutInfo.viewportStartOffset +
+                                listState.layoutInfo.viewportSize.height / 2f
+                            val itemCenter = itemInfo?.let { it.offset + it.size / 2f } ?: viewportCenter
+                            val distance = itemCenter - viewportCenter
+                            val itemSize = itemInfo?.size?.toFloat()?.coerceAtLeast(1f) ?: 240f
+                            val normalized = (distance / itemSize).coerceIn(-3f, 3f)
+                            val scale = (1f - abs(normalized) * 0.18f).coerceIn(0.62f, 1f)
+                            val alpha = (1f - abs(normalized) * 0.35f).coerceIn(0.35f, 1f)
+                            val rotation = normalized * 38f
+
+                            Surface(
+                                onClick = tile.onClick,
+                                shape = MaterialTheme.shapes.extraLarge,
+                                color = tile.containerColor,
+                                contentColor = tile.contentColor,
                                 modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(16.dp),
-                                verticalArrangement = Arrangement.SpaceBetween,
+                                    .size(width = 260.dp, height = 120.dp)
+                                    .graphicsLayer {
+                                        rotationX = rotation
+                                        scaleX = scale
+                                        scaleY = scale
+                                        this.alpha = alpha
+                                        cameraDistance = 16f * density.density
+                                    },
                             ) {
-                                Surface(
-                                    shape = MaterialTheme.shapes.large,
-                                    color = tile.contentColor.copy(alpha = 0.14f),
-                                    modifier = Modifier.size(48.dp),
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(16.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                                 ) {
-                                    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                                        Icon(
-                                            imageVector = tile.icon,
-                                            contentDescription = null,
-                                            tint = tile.contentColor,
-                                            modifier = Modifier.size(26.dp),
-                                        )
-                                    }
-                                }
-                                if (tile.badge != null) {
                                     Surface(
-                                        shape = MaterialTheme.shapes.small,
+                                        shape = MaterialTheme.shapes.large,
                                         color = tile.contentColor.copy(alpha = 0.14f),
+                                        modifier = Modifier.size(44.dp),
                                     ) {
+                                        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                                            Icon(
+                                                imageVector = tile.icon,
+                                                contentDescription = null,
+                                                tint = tile.contentColor,
+                                                modifier = Modifier.size(24.dp),
+                                            )
+                                        }
+                                    }
+                                    Column(Modifier.weight(1f)) {
                                         Text(
-                                            text = tile.badge,
-                                            style = MaterialTheme.typography.labelSmall,
+                                            text = tile.title,
+                                            style = MaterialTheme.typography.titleMedium,
                                             color = tile.contentColor,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis,
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                        )
+                                        Text(
+                                            text = tile.subtitle,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = tile.contentColor.copy(alpha = 0.82f),
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis,
                                         )
                                     }
                                 }
-                                Spacer(Modifier.height(8.dp))
-                                Column {
-                                    Text(
-                                        text = tile.title,
-                                        style = MaterialTheme.typography.titleLarge,
-                                        color = tile.contentColor,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                    Spacer(Modifier.height(4.dp))
-                                    Text(
-                                        text = tile.subtitle,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = tile.contentColor.copy(alpha = 0.82f),
-                                        maxLines = 3,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
+                            }
+                        }
+                    }
+                } else {
+                    LazyRow(
+                        state = listState,
+                        contentPadding = PaddingValues(horizontal = 40.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(260.dp),
+                    ) {
+                        items(count = totalItems, key = { it }) { index ->
+                            val tile = tiles[index % tiles.size]
+                            val itemInfo = listState.layoutInfo.visibleItemsInfo.find { it.key == index }
+                            val viewportCenter = listState.layoutInfo.viewportStartOffset +
+                                listState.layoutInfo.viewportSize.width / 2f
+                            val itemCenter = itemInfo?.let { it.offset + it.size / 2f } ?: viewportCenter
+                            val distance = itemCenter - viewportCenter
+                            val itemWidth = itemInfo?.size?.toFloat()?.coerceAtLeast(1f) ?: 220f
+                            val normalized = (distance / itemWidth).coerceIn(-3f, 3f)
+                            val scale = (1f - abs(normalized) * 0.18f).coerceIn(0.62f, 1f)
+                            val alpha = (1f - abs(normalized) * 0.35f).coerceIn(0.35f, 1f)
+                            val rotation = normalized * 38f
+
+                            Surface(
+                                onClick = tile.onClick,
+                                shape = MaterialTheme.shapes.extraLarge,
+                                color = tile.containerColor,
+                                contentColor = tile.contentColor,
+                                modifier = Modifier
+                                    .size(width = 220.dp, height = 240.dp)
+                                    .graphicsLayer {
+                                        rotationY = rotation
+                                        scaleX = scale
+                                        scaleY = scale
+                                        this.alpha = alpha
+                                        cameraDistance = 16f * density.density
+                                    },
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(16.dp),
+                                    verticalArrangement = Arrangement.SpaceBetween,
+                                ) {
+                                    Surface(
+                                        shape = MaterialTheme.shapes.large,
+                                        color = tile.contentColor.copy(alpha = 0.14f),
+                                        modifier = Modifier.size(48.dp),
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                                            Icon(
+                                                imageVector = tile.icon,
+                                                contentDescription = null,
+                                                tint = tile.contentColor,
+                                                modifier = Modifier.size(26.dp),
+                                            )
+                                        }
+                                    }
+                                    if (tile.badge != null) {
+                                        Surface(
+                                            shape = MaterialTheme.shapes.small,
+                                            color = tile.contentColor.copy(alpha = 0.14f),
+                                        ) {
+                                            Text(
+                                                text = tile.badge,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = tile.contentColor,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                            )
+                                        }
+                                    }
+                                    Spacer(Modifier.height(8.dp))
+                                    Column {
+                                        Text(
+                                            text = tile.title,
+                                            style = MaterialTheme.typography.titleLarge,
+                                            color = tile.contentColor,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                        Spacer(Modifier.height(4.dp))
+                                        Text(
+                                            text = tile.subtitle,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = tile.contentColor.copy(alpha = 0.82f),
+                                            maxLines = 3,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -298,12 +394,14 @@ fun HomeScreen(
                         .padding(horizontal = 32.dp)
                         .widthIn(max = 520.dp),
                 )
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = "Swipe to browse",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                if (!hasScrolled) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = "Swipe to browse",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
     }
