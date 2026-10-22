@@ -69,6 +69,45 @@ object TagEngine {
         }
     }
 
+    /** Reads requested custom fields (e.g. `REPLAYGAIN_*`, `R128_*`), keyed by uppercase name. */
+    fun readCustomFields(file: File, keys: Set<String>): Map<String, String> = runCatching {
+        when (val format = formatFor(file)) {
+            AudioFormat.DFF -> DffTagHandler.readCustomFields(file, keys)
+            AudioFormat.OPUS -> OpusTagHandler.readCustomFields(file, keys)
+            AudioFormat.APE, AudioFormat.WAVPACK -> ApeTagHandler.readCustomFields(file, keys)
+            else -> {
+                val af = if (file.extension.lowercase() == "asf") {
+                    AudioFileIO.readAs(file, "wma")
+                } else {
+                    AudioFileIO.read(file)
+                }
+                val tag = af.tag ?: return@runCatching emptyMap()
+                val id3Tag: AbstractID3v2Tag? = when (tag) {
+                    is AbstractID3v2Tag -> tag
+                    is WavTag -> tag.iD3Tag
+                    is AiffTag -> tag.iD3Tag
+                    else -> null
+                }
+                if (id3Tag != null) {
+                    Id3CustomFields.read(id3Tag, keys)
+                } else if (tag is org.jaudiotagger.tag.vorbiscomment.VorbisCommentTag) {
+                    val out = LinkedHashMap<String, String>()
+                    for (key in keys) {
+                        val v = runCatching { tag.getFirst(key) }.getOrNull()?.trim()
+                            ?: runCatching { tag.getFirst(key.uppercase()) }.getOrNull()?.trim()
+                            ?: runCatching { tag.getFirst(key.lowercase()) }.getOrNull()?.trim()
+                        if (!v.isNullOrEmpty()) {
+                            out[key.uppercase()] = v
+                        }
+                    }
+                    out
+                } else {
+                    emptyMap()
+                }
+            }
+        }
+    }.getOrDefault(emptyMap())
+
     // ---------------------------------------------------------------------
     // JAudioTagger path (MP3, FLAC, M4A/MP4/M4B, Ogg, WAV, AIFF, WMA/ASF, DSF)
     // ---------------------------------------------------------------------
@@ -144,12 +183,16 @@ object TagEngine {
 
         // Free-form custom fields (TXXX for ID3, arbitrary keys for VorbisComment).
         if (request.customFields.isNotEmpty()) {
-            val isId3 = tag is org.jaudiotagger.tag.id3.AbstractID3v2Tag
+            val id3Tag: AbstractID3v2Tag? = when (tag) {
+                is AbstractID3v2Tag -> tag
+                is WavTag -> tag.iD3Tag
+                is AiffTag -> tag.iD3Tag
+                else -> null
+            }
             val isVorbis = tag is org.jaudiotagger.tag.vorbiscomment.VorbisCommentTag
             request.customFields.forEach { (key, value) ->
-                if (isId3) {
-                    val id3 = tag as org.jaudiotagger.tag.id3.AbstractID3v2Tag
-                    Id3CustomFields.write(id3, key, value)
+                if (id3Tag != null) {
+                    Id3CustomFields.write(id3Tag, key, value)
                 } else if (isVorbis) {
                     val vt = tag as org.jaudiotagger.tag.vorbiscomment.VorbisCommentTag
                     if (value.isNullOrBlank()) runCatching { vt.deleteField(key) }

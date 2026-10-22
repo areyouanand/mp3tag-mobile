@@ -31,9 +31,12 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Audiotrack
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Checklist
+import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.FilterAlt
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Refresh
@@ -53,6 +56,7 @@ import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -79,6 +83,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mp3tag.mobile.data.prefs.AppPrefs
 import com.mp3tag.mobile.data.replaygain.LoudnessAnalyzer
 import com.mp3tag.mobile.data.replaygain.TrackLoudness
+import com.mp3tag.mobile.data.tag.AudioFormat
 import com.mp3tag.mobile.data.tag.TagEngine
 import com.mp3tag.mobile.data.tag.WriteOptions
 import com.mp3tag.mobile.data.tag.WriteRequest
@@ -94,6 +99,41 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.Locale
 import kotlin.math.pow
+import kotlin.math.roundToInt
+
+private val REPLAYGAIN_KEYS = setOf(
+    "REPLAYGAIN_TRACK_GAIN",
+    "REPLAYGAIN_TRACK_PEAK",
+    "REPLAYGAIN_ALBUM_GAIN",
+    "REPLAYGAIN_ALBUM_PEAK",
+    "R128_TRACK_GAIN",
+    "R128_ALBUM_GAIN",
+)
+
+private data class ExistingRgTags(
+    val trackGain: String? = null,
+    val trackPeak: String? = null,
+    val albumGain: String? = null,
+    val albumPeak: String? = null,
+    val r128TrackGain: String? = null,
+    val r128AlbumGain: String? = null,
+) {
+    val hasAny: Boolean
+        get() = !trackGain.isNullOrBlank() ||
+            !albumGain.isNullOrBlank() ||
+            !r128TrackGain.isNullOrBlank() ||
+            !r128AlbumGain.isNullOrBlank()
+
+    fun summaryLabel(): String? {
+        if (!hasAny) return null
+        return buildList {
+            trackGain?.let { add("Track $it") }
+            albumGain?.let { add("Album $it") }
+            r128TrackGain?.let { add("R128 track $it (${formatQ78Db(it)})") }
+            r128AlbumGain?.let { add("R128 album $it (${formatQ78Db(it)})") }
+        }.joinToString(" • ")
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -138,7 +178,9 @@ private fun ReplayGainEditorView(
     val scope = rememberCoroutineScope()
     val windowInfo = rememberAdaptiveWindowInfo()
 
+    var existingByPath by remember(paths) { mutableStateOf<Map<String, ExistingRgTags>>(emptyMap()) }
     var tracks by remember(paths) { mutableStateOf<List<TrackLoudness>>(emptyList()) }
+    var skippedPaths by remember(paths) { mutableStateOf<List<String>>(emptyList()) }
     var failedPaths by remember(paths) { mutableStateOf<List<String>>(emptyList()) }
     var excludedPaths by remember(paths) { mutableStateOf<Set<String>>(emptySet()) }
     var albumGain by remember(paths) { mutableStateOf<Double?>(null) }
@@ -153,6 +195,8 @@ private fun ReplayGainEditorView(
 
     var writeTrackGain by rememberSaveable { mutableStateOf(true) }
     var writeAlbumGain by rememberSaveable { mutableStateOf(true) }
+    var writeOpusR128Gain by rememberSaveable { mutableStateOf(true) }
+    var skipExistingRg by rememberSaveable { mutableStateOf(false) }
 
     var saving by remember { mutableStateOf(false) }
     var saveProgressText by remember { mutableStateOf<String?>(null) }
@@ -160,6 +204,11 @@ private fun ReplayGainEditorView(
 
     var filesSheetOpen by rememberSaveable { mutableStateOf(false) }
     var gainSheetOpen by rememberSaveable { mutableStateOf(false) }
+    var toolsSheetOpen by rememberSaveable { mutableStateOf(false) }
+
+    val hasOpusFiles = remember(paths) {
+        paths.any { TagEngine.formatFor(File(it)) == AudioFormat.OPUS }
+    }
 
     fun recomputeAlbumMetrics(currentTracks: List<TrackLoudness>, currentExcluded: Set<String>) {
         val included = currentTracks.filter { it.path !in currentExcluded }
@@ -174,10 +223,25 @@ private fun ReplayGainEditorView(
         }
     }
 
-    fun startScan() {
+    suspend fun loadExistingTagsMap(): Map<String, ExistingRgTags> = withContext(Dispatchers.IO) {
+        paths.associateWith { path ->
+            val raw = TagEngine.readCustomFields(File(path), REPLAYGAIN_KEYS)
+            ExistingRgTags(
+                trackGain = raw["REPLAYGAIN_TRACK_GAIN"],
+                trackPeak = raw["REPLAYGAIN_TRACK_PEAK"],
+                albumGain = raw["REPLAYGAIN_ALBUM_GAIN"],
+                albumPeak = raw["REPLAYGAIN_ALBUM_PEAK"],
+                r128TrackGain = raw["R128_TRACK_GAIN"],
+                r128AlbumGain = raw["R128_ALBUM_GAIN"],
+            )
+        }
+    }
+
+    fun startScan(skipAlreadyTagged: Boolean = skipExistingRg) {
         scanJob?.cancel()
         analyzing = true
         tracks = emptyList()
+        skippedPaths = emptyList()
         failedPaths = emptyList()
         progressCurrent = 0
         progressTotal = paths.size
@@ -187,8 +251,13 @@ private fun ReplayGainEditorView(
         albumPeakLinear = null
 
         scanJob = scope.launch {
+            val existingMap = loadExistingTagsMap()
+            existingByPath = existingMap
+
             val analyzedList = mutableListOf<TrackLoudness>()
+            val skippedList = mutableListOf<String>()
             val failedList = mutableListOf<String>()
+
             withContext(Dispatchers.IO) {
                 for ((idx, path) in paths.withIndex()) {
                     if (!isActive) break
@@ -196,17 +265,24 @@ private fun ReplayGainEditorView(
                     withContext(Dispatchers.Main) {
                         currentFileName = file.name
                     }
-                    val result = LoudnessAnalyzer.analyzeFile(context, file)
-                    if (result != null) {
-                        analyzedList.add(result)
+                    val existing = existingMap[path]
+                    if (skipAlreadyTagged && existing?.hasAny == true) {
+                        skippedList.add(path)
                     } else {
-                        failedList.add(path)
+                        val result = LoudnessAnalyzer.analyzeFile(context, file)
+                        if (result != null) {
+                            analyzedList.add(result)
+                        } else {
+                            failedList.add(path)
+                        }
                     }
                     val snapshotTracks = analyzedList.toList()
+                    val snapshotSkipped = skippedList.toList()
                     val snapshotFailed = failedList.toList()
                     withContext(Dispatchers.Main) {
                         progressCurrent = idx + 1
                         tracks = snapshotTracks
+                        skippedPaths = snapshotSkipped
                         failedPaths = snapshotFailed
                         recomputeAlbumMetrics(snapshotTracks, excludedPaths)
                     }
@@ -218,7 +294,7 @@ private fun ReplayGainEditorView(
     }
 
     LaunchedEffect(paths) {
-        startScan()
+        startScan(skipExistingRg)
     }
 
     val requestExit: () -> Unit = {
@@ -229,6 +305,12 @@ private fun ReplayGainEditorView(
 
     val includedTracks = remember(tracks, excludedPaths) {
         tracks.filter { it.path !in excludedPaths }
+    }
+    val activePathsForRemove = remember(paths, excludedPaths) {
+        paths.filter { it !in excludedPaths }
+    }
+    val existingTaggedCount = remember(existingByPath) {
+        existingByPath.values.count { it.hasAny }
     }
     val canSave = !analyzing && !saving && includedTracks.isNotEmpty() && (writeTrackGain || writeAlbumGain)
 
@@ -246,14 +328,21 @@ private fun ReplayGainEditorView(
                             saveProgressText = "Writing ${idx + 1} / ${includedTracks.size}: ${File(t.path).name}"
                         }
                         val file = File(t.path)
+                        val isOpus = TagEngine.formatFor(file) == AudioFormat.OPUS
                         val customFields = LinkedHashMap<String, String>()
                         if (writeTrackGain) {
                             customFields["REPLAYGAIN_TRACK_GAIN"] = formatSignedDb(t.gainDb)
                             customFields["REPLAYGAIN_TRACK_PEAK"] = formatLinearPeak(10.0.pow(t.peakDb / 20.0))
+                            if (isOpus && writeOpusR128Gain) {
+                                customFields["R128_TRACK_GAIN"] = toOpusR128Q78(t.gainDb)
+                            }
                         }
                         if (writeAlbumGain && targetAlbumGain != null) {
                             customFields["REPLAYGAIN_ALBUM_GAIN"] = formatSignedDb(targetAlbumGain)
                             customFields["REPLAYGAIN_ALBUM_PEAK"] = formatLinearPeak(targetAlbumPeak)
+                            if (isOpus && writeOpusR128Gain) {
+                                customFields["R128_ALBUM_GAIN"] = toOpusR128Q78(targetAlbumGain)
+                            }
                         }
                         runCatching {
                             TagEngine.write(
@@ -267,6 +356,40 @@ private fun ReplayGainEditorView(
                         )
                     }
                 }
+                existingByPath = loadExistingTagsMap()
+                saving = false
+                saveProgressText = null
+                outcomes = results
+            }
+        }
+    }
+
+    val triggerRemoveReplayGainTags: () -> Unit = {
+        if (!analyzing && !saving && activePathsForRemove.isNotEmpty()) {
+            saving = true
+            saveProgressText = "Removing ReplayGain tags…"
+            scope.launch {
+                val results = withContext(Dispatchers.IO) {
+                    val options = WriteOptions(id3Version = prefs.id3Version)
+                    val clearMap = REPLAYGAIN_KEYS.associateWith { "" }
+                    activePathsForRemove.mapIndexed { idx, path ->
+                        val file = File(path)
+                        withContext(Dispatchers.Main) {
+                            saveProgressText = "Removing ${idx + 1} / ${activePathsForRemove.size}: ${file.name}"
+                        }
+                        runCatching {
+                            TagEngine.write(
+                                file = file,
+                                request = WriteRequest(customFields = clearMap),
+                                options = options,
+                            )
+                        }.fold(
+                            onSuccess = { SaveOutcome(file, success = true, message = null) },
+                            onFailure = { SaveOutcome(file, success = false, message = it.message) },
+                        )
+                    }
+                }
+                existingByPath = loadExistingTagsMap()
                 saving = false
                 saveProgressText = null
                 outcomes = results
@@ -292,7 +415,7 @@ private fun ReplayGainEditorView(
     }
 
     val excludeAllFiles: () -> Unit = {
-        val next = tracks.map { it.path }.toSet()
+        val next = paths.toSet()
         excludedPaths = next
         recomputeAlbumMetrics(tracks, next)
     }
@@ -328,10 +451,16 @@ private fun ReplayGainEditorView(
                 },
                 actions = {
                     IconButton(
-                        onClick = { startScan() },
+                        onClick = { startScan(skipExistingRg) },
                         enabled = !analyzing && !saving,
                     ) {
                         Icon(Icons.Filled.Refresh, contentDescription = "Re-scan")
+                    }
+                    IconButton(
+                        onClick = { toolsSheetOpen = true },
+                        enabled = !saving,
+                    ) {
+                        Icon(Icons.Filled.Build, contentDescription = "ReplayGain tools")
                     }
                     IconButton(
                         onClick = triggerSave,
@@ -368,18 +497,23 @@ private fun ReplayGainEditorView(
                             ReplayGainSidePane(
                                 totalFiles = paths.size,
                                 analyzedCount = tracks.size,
+                                skippedCount = skippedPaths.size,
+                                existingTaggedCount = existingTaggedCount,
                                 includedCount = includedTracks.size,
                                 albumLufs = albumLufs,
                                 albumGain = albumGain,
                                 albumPeakLinear = albumPeakLinear,
                                 writeTrackGain = writeTrackGain,
                                 writeAlbumGain = writeAlbumGain,
-                                onToggleTrackGain = { writeTrackGain = !writeTrackGain },
-                                onToggleAlbumGain = { writeAlbumGain = !writeAlbumGain },
+                                writeOpusR128Gain = writeOpusR128Gain,
+                                hasOpusFiles = hasOpusFiles,
+                                skipExistingRg = skipExistingRg,
                                 onOpenGainSheet = { gainSheetOpen = true },
                                 onOpenFilesSheet = { filesSheetOpen = true },
                                 canSave = canSave,
                                 onSave = triggerSave,
+                                canRemove = !analyzing && !saving && existingTaggedCount > 0,
+                                onRemoveTags = triggerRemoveReplayGainTags,
                                 modifier = Modifier
                                     .width(windowInfo.sidePaneWidth)
                                     .fillMaxHeight(),
@@ -387,8 +521,11 @@ private fun ReplayGainEditorView(
                             VerticalDivider()
                             ReplayGainTracksPane(
                                 tracks = tracks,
+                                skippedPaths = skippedPaths,
                                 failedPaths = failedPaths,
+                                existingByPath = existingByPath,
                                 excludedPaths = excludedPaths,
+                                writeOpusR128Gain = writeOpusR128Gain,
                                 onToggleTrack = toggleTrackIncluded,
                                 onIncludeAll = includeAllFiles,
                                 onExcludeAll = excludeAllFiles,
@@ -406,10 +543,14 @@ private fun ReplayGainEditorView(
                             item {
                                 ReplayGainSummaryCard(
                                     analyzedCount = tracks.size,
+                                    skippedCount = skippedPaths.size,
+                                    existingTaggedCount = existingTaggedCount,
                                     totalFiles = paths.size,
                                     albumLufs = albumLufs,
                                     albumGain = albumGain,
                                     albumPeakLinear = albumPeakLinear,
+                                    hasOpusFiles = hasOpusFiles,
+                                    writeOpusR128Gain = writeOpusR128Gain,
                                 )
                             }
 
@@ -417,19 +558,10 @@ private fun ReplayGainEditorView(
                                 GainModePickerField(
                                     writeTrackGain = writeTrackGain,
                                     writeAlbumGain = writeAlbumGain,
+                                    writeOpusR128Gain = writeOpusR128Gain,
+                                    hasOpusFiles = hasOpusFiles,
+                                    skipExistingRg = skipExistingRg,
                                     onOpenSheet = { gainSheetOpen = true },
-                                )
-                            }
-
-                            item {
-                                GainOptionsCard(
-                                    writeTrackGain = writeTrackGain,
-                                    writeAlbumGain = writeAlbumGain,
-                                    albumGain = albumGain,
-                                    albumPeakLinear = albumPeakLinear,
-                                    sampleTrack = includedTracks.firstOrNull() ?: tracks.firstOrNull(),
-                                    onToggleTrackGain = { writeTrackGain = !writeTrackGain },
-                                    onToggleAlbumGain = { writeAlbumGain = !writeAlbumGain },
                                 )
                             }
 
@@ -457,8 +589,41 @@ private fun ReplayGainEditorView(
                                     val selected = track.path !in excludedPaths
                                     AnalyzedTrackRow(
                                         track = track,
+                                        existing = existingByPath[track.path],
                                         selected = selected,
+                                        showOpusR128 = writeOpusR128Gain && TagEngine.formatFor(File(track.path)) == AudioFormat.OPUS,
                                         onToggle = { toggleTrackIncluded(track.path) },
+                                    )
+                                }
+                            }
+
+                            if (skippedPaths.isNotEmpty()) {
+                                item {
+                                    Text(
+                                        text = "Skipped — already have ReplayGain (${skippedPaths.size})",
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = MaterialTheme.colorScheme.secondary,
+                                        modifier = Modifier.padding(top = 4.dp),
+                                    )
+                                }
+                                items(
+                                    items = skippedPaths,
+                                    key = { "skipped:$it" },
+                                ) { path ->
+                                    val existing = existingByPath[path]
+                                    ListItem(
+                                        headlineContent = {
+                                            Text(File(path).name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        },
+                                        supportingContent = {
+                                            Text(
+                                                existing?.summaryLabel() ?: "Existing ReplayGain kept",
+                                                style = MaterialTheme.typography.bodySmall,
+                                            )
+                                        },
+                                        leadingContent = {
+                                            Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                                        },
                                     )
                                 }
                             }
@@ -511,6 +676,20 @@ private fun ReplayGainEditorView(
                                     Spacer(Modifier.width(8.dp))
                                     Text("Save ReplayGain to ${includedTracks.size} file(s)")
                                 }
+                                if (existingTaggedCount > 0) {
+                                    Spacer(Modifier.height(8.dp))
+                                    OutlinedButton(
+                                        onClick = triggerRemoveReplayGainTags,
+                                        enabled = !analyzing && !saving && activePathsForRemove.isNotEmpty(),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(44.dp),
+                                    ) {
+                                        Icon(Icons.Filled.DeleteSweep, contentDescription = null)
+                                        Spacer(Modifier.width(8.dp))
+                                        Text("Remove ReplayGain tags")
+                                    }
+                                }
                                 Spacer(Modifier.navigationBarsPadding().height(16.dp))
                             }
                         }
@@ -548,7 +727,7 @@ private fun ReplayGainEditorView(
         }
     }
 
-    // ModalBottomSheet for selecting Gain mode (matching LabeledField's value picker in EditorScreen)
+    // ModalBottomSheet for selecting Gain tags to write & scan options (matching EditorScreen's value picker sheet)
     if (gainSheetOpen) {
         ModalBottomSheet(onDismissRequest = { gainSheetOpen = false }) {
             Column(
@@ -623,6 +802,68 @@ private fun ReplayGainEditorView(
                     modifier = Modifier.clickable { writeAlbumGain = !writeAlbumGain },
                 )
 
+                ListItem(
+                    headlineContent = { Text("Opus R128 gain (.opus files)") },
+                    supportingContent = {
+                        Text(
+                            "Writes RFC 7845 R128_TRACK_GAIN / R128_ALBUM_GAIN (Q7.8 at -23 LUFS reference)",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    },
+                    leadingContent = {
+                        Icon(Icons.Filled.GraphicEq, contentDescription = null)
+                    },
+                    trailingContent = {
+                        Checkbox(checked = writeOpusR128Gain, onCheckedChange = null)
+                    },
+                    colors = ListItemDefaults.colors(
+                        containerColor = if (writeOpusR128Gain) {
+                            MaterialTheme.colorScheme.secondaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.surface
+                        },
+                    ),
+                    modifier = Modifier.clickable { writeOpusR128Gain = !writeOpusR128Gain },
+                )
+
+                HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                Text(
+                    text = "Scan behavior",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                )
+
+                ListItem(
+                    headlineContent = { Text("Skip files that already have ReplayGain") },
+                    supportingContent = {
+                        Text(
+                            "Files with existing REPLAYGAIN_* or R128_* tags are skipped when scanning ($existingTaggedCount found)",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    },
+                    leadingContent = {
+                        Icon(Icons.Filled.FilterAlt, contentDescription = null)
+                    },
+                    trailingContent = {
+                        Checkbox(checked = skipExistingRg, onCheckedChange = null)
+                    },
+                    colors = ListItemDefaults.colors(
+                        containerColor = if (skipExistingRg) {
+                            MaterialTheme.colorScheme.secondaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.surface
+                        },
+                    ),
+                    modifier = Modifier.clickable {
+                        val next = !skipExistingRg
+                        skipExistingRg = next
+                        if (!analyzing) {
+                            startScan(next)
+                        }
+                    },
+                )
+
                 HorizontalDivider(Modifier.padding(vertical = 8.dp))
                 Text(
                     text = "Quick presets",
@@ -652,6 +893,54 @@ private fun ReplayGainEditorView(
         }
     }
 
+    // Tools sheet (matching EditorScreen's Tools sheet)
+    if (toolsSheetOpen) {
+        ModalBottomSheet(onDismissRequest = { toolsSheetOpen = false }) {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                Text(
+                    text = "ReplayGain tools",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                )
+                ListItem(
+                    headlineContent = { Text("Re-scan all files (include already tagged)") },
+                    leadingContent = { Icon(Icons.Filled.Refresh, contentDescription = null) },
+                    modifier = Modifier.clickable {
+                        toolsSheetOpen = false
+                        skipExistingRg = false
+                        startScan(skipAlreadyTagged = false)
+                    },
+                )
+                ListItem(
+                    headlineContent = { Text("Scan only files missing ReplayGain") },
+                    leadingContent = { Icon(Icons.Filled.FilterAlt, contentDescription = null) },
+                    modifier = Modifier.clickable {
+                        toolsSheetOpen = false
+                        skipExistingRg = true
+                        startScan(skipAlreadyTagged = true)
+                    },
+                )
+                ListItem(
+                    headlineContent = { Text("Remove ReplayGain & R128 tags from active files") },
+                    supportingContent = {
+                        Text(
+                            "Clears REPLAYGAIN_TRACK_*, REPLAYGAIN_ALBUM_*, and R128_*_GAIN tags",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    },
+                    leadingContent = { Icon(Icons.Filled.DeleteSweep, contentDescription = null) },
+                    modifier = Modifier.clickable {
+                        toolsSheetOpen = false
+                        triggerRemoveReplayGainTags()
+                    },
+                )
+                Spacer(Modifier.navigationBarsPadding())
+                Spacer(Modifier.height(36.dp))
+            }
+        }
+    }
+
     // ModalBottomSheet for selecting active files (matching EditorScreen's "Files in this edit" sheet)
     if (filesSheetOpen) {
         ModalBottomSheet(onDismissRequest = { filesSheetOpen = false }) {
@@ -665,23 +954,39 @@ private fun ReplayGainEditorView(
                 Row(modifier = Modifier.padding(horizontal = 8.dp)) {
                     TextButton(onClick = includeAllFiles) { Text("Select all") }
                     TextButton(onClick = excludeAllFiles) { Text("Deselect all") }
+                    if (existingTaggedCount > 0) {
+                        TextButton(onClick = {
+                            val tagged = existingByPath.filterValues { it.hasAny }.keys
+                            excludedPaths = tagged
+                            recomputeAlbumMetrics(tracks, tagged)
+                        }) { Text("Deselect already tagged") }
+                    }
                 }
                 Column(
                     modifier = Modifier
                         .heightIn(max = (windowInfo.heightDp * 0.55f).dp.coerceIn(180.dp, 460.dp))
                         .verticalScroll(rememberScrollState()),
                 ) {
-                    tracks.forEach { track ->
-                        val included = track.path !in excludedPaths
+                    val trackByPath = remember(tracks) { tracks.associateBy { it.path } }
+                    paths.forEach { path ->
+                        val included = path !in excludedPaths
+                        val track = trackByPath[path]
+                        val existing = existingByPath[path]
+                        val subtitle = buildList {
+                            track?.let {
+                                add("New: ${formatSignedDb(it.gainDb)} (${String.format(Locale.US, "%.1f LUFS", it.lufs)})")
+                            }
+                            existing?.summaryLabel()?.let {
+                                add("Existing: $it")
+                            }
+                        }.joinToString(" • ").ifEmpty { "Pending scan" }
+
                         ListItem(
                             headlineContent = {
-                                Text(File(track.path).name, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                Text(File(path).name, maxLines = 2, overflow = TextOverflow.Ellipsis)
                             },
                             supportingContent = {
-                                Text(
-                                    "Gain ${formatSignedDb(track.gainDb)} • ${String.format(Locale.US, "%.1f LUFS", track.lufs)}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                )
+                                Text(subtitle, style = MaterialTheme.typography.bodySmall)
                             },
                             leadingContent = {
                                 Icon(Icons.Filled.MusicNote, contentDescription = null)
@@ -689,7 +994,7 @@ private fun ReplayGainEditorView(
                             trailingContent = {
                                 Checkbox(checked = included, onCheckedChange = null)
                             },
-                            modifier = Modifier.clickable { toggleTrackIncluded(track.path) },
+                            modifier = Modifier.clickable { toggleTrackIncluded(path) },
                         )
                     }
                 }
@@ -706,8 +1011,8 @@ private fun ReplayGainEditorView(
             onDismissRequest = { outcomes = null },
             title = {
                 Text(
-                    if (ok == resultList.size) "Saved $ok file(s)"
-                    else "Saved $ok of ${resultList.size} files",
+                    if (ok == resultList.size) "Updated $ok file(s)"
+                    else "Updated $ok of ${resultList.size} files",
                 )
             },
             text = {
@@ -815,23 +1120,34 @@ private fun ScanProgressBanner(
 @Composable
 private fun ReplayGainSummaryCard(
     analyzedCount: Int,
+    skippedCount: Int,
+    existingTaggedCount: Int,
     totalFiles: Int,
     albumLufs: Double?,
     albumGain: Double?,
     albumPeakLinear: Double?,
+    hasOpusFiles: Boolean,
+    writeOpusR128Gain: Boolean,
 ) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp)) {
             val topLine = buildList {
                 add("$analyzedCount of $totalFiles analyzed")
+                if (skippedCount > 0) add("$skippedCount skipped")
+                if (existingTaggedCount > 0) add("$existingTaggedCount already tagged")
                 add("Target ${String.format(Locale.US, "%.1f LUFS", LoudnessAnalyzer.TARGET_LUFS)}")
                 albumLufs?.let { add("Album ${String.format(Locale.US, "%.1f LUFS", it)}") }
             }.joinToString(" • ")
             Text(topLine, style = MaterialTheme.typography.bodySmall)
             if (albumGain != null) {
                 Spacer(Modifier.height(4.dp))
+                val r128Suffix = if (hasOpusFiles && writeOpusR128Gain) {
+                    " • Opus R128: ${toOpusR128Q78(albumGain)} (${formatSignedDb(albumGain - 5.0)})"
+                } else {
+                    ""
+                }
                 Text(
-                    text = "Album gain: ${formatSignedDb(albumGain)} • Album peak: ${formatLinearPeak(albumPeakLinear ?: 1.0)}",
+                    text = "Album gain: ${formatSignedDb(albumGain)} • Album peak: ${formatLinearPeak(albumPeakLinear ?: 1.0)}$r128Suffix",
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.primary,
                 )
@@ -844,23 +1160,32 @@ private fun ReplayGainSummaryCard(
 private fun GainModePickerField(
     writeTrackGain: Boolean,
     writeAlbumGain: Boolean,
+    writeOpusR128Gain: Boolean,
+    hasOpusFiles: Boolean,
+    skipExistingRg: Boolean,
     onOpenSheet: () -> Unit,
 ) {
-    val summaryText = when {
+    val baseText = when {
         writeTrackGain && writeAlbumGain -> "Track gain & Album gain"
         writeTrackGain -> "Track gain only"
         writeAlbumGain -> "Album gain only"
         else -> "None selected"
     }
+    val extras = buildList {
+        if (hasOpusFiles && writeOpusR128Gain) add("+ Opus R128")
+        if (skipExistingRg) add("Skip existing")
+    }
+    val summaryText = if (extras.isEmpty()) baseText else "$baseText (${extras.joinToString(", ")})"
+
     Box(modifier = Modifier.fillMaxWidth()) {
         OutlinedTextField(
             value = summaryText,
             onValueChange = {},
             readOnly = true,
             singleLine = true,
-            label = { Text("Gain tags to write (2 options)") },
+            label = { Text("Gain tags to write") },
             supportingText = {
-                Text("Tap to choose Track gain, Album gain, or both")
+                Text("Tap to select Track gain, Album gain, Opus R128, or skip existing")
             },
             trailingIcon = {
                 IconButton(onClick = onOpenSheet) {
@@ -881,105 +1206,26 @@ private fun GainModePickerField(
 }
 
 @Composable
-private fun GainOptionsCard(
-    writeTrackGain: Boolean,
-    writeAlbumGain: Boolean,
-    albumGain: Double?,
-    albumPeakLinear: Double?,
-    sampleTrack: TrackLoudness?,
-    onToggleTrackGain: () -> Unit,
-    onToggleAlbumGain: () -> Unit,
-) {
-    Card(Modifier.fillMaxWidth()) {
-        Column {
-            Text(
-                text = "Tag fields to write",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-            )
-            ListItem(
-                headlineContent = { Text("Track gain") },
-                supportingContent = {
-                    val preview = sampleTrack?.let {
-                        "REPLAYGAIN_TRACK_GAIN (${formatSignedDb(it.gainDb)}) • REPLAYGAIN_TRACK_PEAK (${formatLinearPeak(10.0.pow(it.peakDb / 20.0))})"
-                    } ?: "REPLAYGAIN_TRACK_GAIN & REPLAYGAIN_TRACK_PEAK (per-file loudness)"
-                    Text(
-                        preview,
-                        style = MaterialTheme.typography.bodySmall,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                },
-                leadingContent = {
-                    Icon(
-                        if (writeTrackGain) Icons.Filled.MusicNote else Icons.Filled.Audiotrack,
-                        contentDescription = null,
-                    )
-                },
-                trailingContent = {
-                    Checkbox(checked = writeTrackGain, onCheckedChange = { onToggleTrackGain() })
-                },
-                colors = ListItemDefaults.colors(
-                    containerColor = if (writeTrackGain) {
-                        MaterialTheme.colorScheme.secondaryContainer
-                    } else {
-                        Color.Transparent
-                    },
-                ),
-                modifier = Modifier.clickable(onClick = onToggleTrackGain),
-            )
-            ListItem(
-                headlineContent = { Text("Album gain") },
-                supportingContent = {
-                    val preview = albumGain?.let {
-                        "REPLAYGAIN_ALBUM_GAIN (${formatSignedDb(it)}) • REPLAYGAIN_ALBUM_PEAK (${formatLinearPeak(albumPeakLinear ?: 1.0)})"
-                    } ?: "REPLAYGAIN_ALBUM_GAIN & REPLAYGAIN_ALBUM_PEAK (shared album loudness)"
-                    Text(
-                        preview,
-                        style = MaterialTheme.typography.bodySmall,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                },
-                leadingContent = {
-                    Icon(
-                        Icons.Filled.Album,
-                        contentDescription = null,
-                    )
-                },
-                trailingContent = {
-                    Checkbox(checked = writeAlbumGain, onCheckedChange = { onToggleAlbumGain() })
-                },
-                colors = ListItemDefaults.colors(
-                    containerColor = if (writeAlbumGain) {
-                        MaterialTheme.colorScheme.secondaryContainer
-                    } else {
-                        Color.Transparent
-                    },
-                ),
-                modifier = Modifier.clickable(onClick = onToggleAlbumGain),
-            )
-        }
-    }
-}
-
-@Composable
 private fun ReplayGainSidePane(
     totalFiles: Int,
     analyzedCount: Int,
+    skippedCount: Int,
+    existingTaggedCount: Int,
     includedCount: Int,
     albumLufs: Double?,
     albumGain: Double?,
     albumPeakLinear: Double?,
     writeTrackGain: Boolean,
     writeAlbumGain: Boolean,
-    onToggleTrackGain: () -> Unit,
-    onToggleAlbumGain: () -> Unit,
+    writeOpusR128Gain: Boolean,
+    hasOpusFiles: Boolean,
+    skipExistingRg: Boolean,
     onOpenGainSheet: () -> Unit,
     onOpenFilesSheet: () -> Unit,
     canSave: Boolean,
     onSave: () -> Unit,
+    canRemove: Boolean,
+    onRemoveTags: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -990,26 +1236,23 @@ private fun ReplayGainSidePane(
     ) {
         ReplayGainSummaryCard(
             analyzedCount = analyzedCount,
+            skippedCount = skippedCount,
+            existingTaggedCount = existingTaggedCount,
             totalFiles = totalFiles,
             albumLufs = albumLufs,
             albumGain = albumGain,
             albumPeakLinear = albumPeakLinear,
+            hasOpusFiles = hasOpusFiles,
+            writeOpusR128Gain = writeOpusR128Gain,
         )
 
         GainModePickerField(
             writeTrackGain = writeTrackGain,
             writeAlbumGain = writeAlbumGain,
+            writeOpusR128Gain = writeOpusR128Gain,
+            hasOpusFiles = hasOpusFiles,
+            skipExistingRg = skipExistingRg,
             onOpenSheet = onOpenGainSheet,
-        )
-
-        GainOptionsCard(
-            writeTrackGain = writeTrackGain,
-            writeAlbumGain = writeAlbumGain,
-            albumGain = albumGain,
-            albumPeakLinear = albumPeakLinear,
-            sampleTrack = null,
-            onToggleTrackGain = onToggleTrackGain,
-            onToggleAlbumGain = onToggleAlbumGain,
         )
 
         if (totalFiles > 1) {
@@ -1055,6 +1298,20 @@ private fun ReplayGainSidePane(
             Text("Save $includedCount file(s)")
         }
 
+        if (existingTaggedCount > 0) {
+            OutlinedButton(
+                onClick = onRemoveTags,
+                enabled = canRemove,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(40.dp),
+            ) {
+                Icon(Icons.Filled.DeleteSweep, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("Remove RG tags")
+            }
+        }
+
         Spacer(Modifier.navigationBarsPadding())
     }
 }
@@ -1062,8 +1319,11 @@ private fun ReplayGainSidePane(
 @Composable
 private fun ReplayGainTracksPane(
     tracks: List<TrackLoudness>,
+    skippedPaths: List<String>,
     failedPaths: List<String>,
+    existingByPath: Map<String, ExistingRgTags>,
     excludedPaths: Set<String>,
+    writeOpusR128Gain: Boolean,
     onToggleTrack: (String) -> Unit,
     onIncludeAll: () -> Unit,
     onExcludeAll: () -> Unit,
@@ -1099,8 +1359,40 @@ private fun ReplayGainTracksPane(
                 val selected = track.path !in excludedPaths
                 AnalyzedTrackRow(
                     track = track,
+                    existing = existingByPath[track.path],
                     selected = selected,
+                    showOpusR128 = writeOpusR128Gain && TagEngine.formatFor(File(track.path)) == AudioFormat.OPUS,
                     onToggle = { onToggleTrack(track.path) },
+                )
+            }
+        }
+        if (skippedPaths.isNotEmpty()) {
+            item {
+                Text(
+                    text = "Skipped — already have ReplayGain (${skippedPaths.size})",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.secondary,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                )
+            }
+            items(
+                items = skippedPaths,
+                key = { "skipped:$it" },
+            ) { path ->
+                val existing = existingByPath[path]
+                ListItem(
+                    headlineContent = {
+                        Text(File(path).name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    },
+                    supportingContent = {
+                        Text(
+                            existing?.summaryLabel() ?: "Existing ReplayGain kept",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    },
+                    leadingContent = {
+                        Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    },
                 )
             }
         }
@@ -1147,27 +1439,49 @@ private fun ReplayGainTracksPane(
 @Composable
 private fun AnalyzedTrackRow(
     track: TrackLoudness,
+    existing: ExistingRgTags?,
     selected: Boolean,
+    showOpusR128: Boolean,
     onToggle: () -> Unit,
 ) {
     val file = File(track.path)
     val linearPeak = 10.0.pow(track.peakDb / 20.0)
+    val r128Part = if (showOpusR128) {
+        " • R128 ${toOpusR128Q78(track.gainDb)} (${formatSignedDb(track.gainDb - 5.0)})"
+    } else {
+        ""
+    }
+    val analyzedLine = String.format(
+        Locale.US,
+        "Track %s • %.1f LUFS • Peak %s (%.1f dBFS)%s",
+        formatSignedDb(track.gainDb),
+        track.lufs,
+        formatLinearPeak(linearPeak),
+        track.peakDb,
+        r128Part,
+    )
+    val existingLine = existing?.summaryLabel()
+
     ListItem(
         headlineContent = {
             Text(file.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
         },
         supportingContent = {
-            Text(
-                text = String.format(
-                    Locale.US,
-                    "Track %s • %.1f LUFS • Peak %s (%.1f dBFS)",
-                    formatSignedDb(track.gainDb),
-                    track.lufs,
-                    formatLinearPeak(linearPeak),
-                    track.peakDb,
-                ),
-                style = MaterialTheme.typography.bodySmall,
-            )
+            Column {
+                Text(
+                    text = analyzedLine,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                if (existingLine != null) {
+                    Text(
+                        text = "Existing: $existingLine",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
         },
         leadingContent = {
             Icon(
@@ -1187,6 +1501,21 @@ private fun AnalyzedTrackRow(
         ),
         modifier = Modifier.clickable(onClick = onToggle),
     )
+}
+
+/**
+ * Converts a ReplayGain 2.0 gain (referenced to -18.0 LUFS) to an RFC 7845 Opus
+ * `R128_*_GAIN` Q7.8 fixed-point integer string (referenced to -23.0 LUFS).
+ */
+private fun toOpusR128Q78(replayGainDb: Double): String {
+    val r128GainDb = replayGainDb - 5.0
+    val q78 = (r128GainDb * 256.0).roundToInt().coerceIn(-32768, 32767)
+    return q78.toString()
+}
+
+private fun formatQ78Db(q78Str: String): String {
+    val q = q78Str.trim().toIntOrNull() ?: return q78Str
+    return formatSignedDb(q / 256.0)
 }
 
 private fun formatSignedDb(gainDb: Double): String =

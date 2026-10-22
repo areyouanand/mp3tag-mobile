@@ -136,6 +136,25 @@ internal object ApeTagHandler {
         val bitrateKbps: Int?,
     )
 
+    fun readCustomFields(file: File, keys: Set<String>): Map<String, String> = runCatching {
+        val upperWanted = keys.map { it.uppercase() }.toSet()
+        RandomAccessFile(file, "r").use { raf ->
+            val parsed = locateAndParseApeTag(raf, raf.length()) ?: return emptyMap()
+            val out = LinkedHashMap<String, String>()
+            for (item in parsed.items) {
+                if (item.isBinary) continue
+                val upperKey = item.key.uppercase()
+                if (upperKey in upperWanted) {
+                    val text = item.valueBytes.toString(Charsets.UTF_8).replace('\u0000', ';').trim()
+                    if (text.isNotEmpty()) {
+                        out[upperKey] = text
+                    }
+                }
+            }
+            out
+        }
+    }.getOrDefault(emptyMap())
+
     fun read(file: File, format: AudioFormat): TagSnapshot {
         RandomAccessFile(file, "r").use { raf ->
             val fileLen = raf.length()

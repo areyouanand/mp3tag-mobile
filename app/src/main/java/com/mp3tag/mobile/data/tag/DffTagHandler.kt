@@ -37,6 +37,27 @@ internal object DffTagHandler {
             get() = dataPos + paddedDataSize
     }
 
+    fun readCustomFields(file: File, keys: Set<String>): Map<String, String> = runCatching {
+        RandomAccessFile(file, "r").use { raf ->
+            val fileLen = raf.length()
+            if (fileLen < 16L) return emptyMap()
+            if (readChunkId(raf) != "FRM8") return emptyMap()
+            val frm8DataSize = raf.readLong()
+            if (readChunkId(raf) != "DSD ") return emptyMap()
+            var id3Tag: AbstractID3v2Tag? = null
+            val endOfFrm8 = (12L + frm8DataSize).coerceAtMost(fileLen)
+            while (raf.filePointer + 12L <= endOfFrm8) {
+                val chunk = readChunkHeader(raf) ?: break
+                if (chunk.dataPos + chunk.dataSize > fileLen) break
+                if ((chunk.id == "ID3 " || chunk.id == "id3 ") && chunk.dataSize in 10L..(64L * 1024L * 1024L)) {
+                    id3Tag = parseId3Chunk(raf, chunk.dataSize.toInt(), file.name)
+                }
+                raf.seek(chunk.nextChunkPos.coerceAtMost(fileLen))
+            }
+            if (id3Tag != null) Id3CustomFields.read(id3Tag, keys) else emptyMap()
+        }
+    }.getOrDefault(emptyMap())
+
     fun read(file: File): TagSnapshot {
         RandomAccessFile(file, "r").use { raf ->
             val fileLen = raf.length()

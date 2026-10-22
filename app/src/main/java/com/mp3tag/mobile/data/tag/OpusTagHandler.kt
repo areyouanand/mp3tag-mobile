@@ -45,6 +45,54 @@ internal object OpusTagHandler {
             get() = 27 + segmentTable.size + body.size
     }
 
+    fun readCustomFields(file: File, keys: Set<String>): Map<String, String> = runCatching {
+        RandomAccessFile(file, "r").use { raf ->
+            val fileLen = raf.length()
+            if (fileLen < 28L) return emptyMap()
+            val firstPage = readNextPage(raf) ?: return emptyMap()
+            if (firstPage.body.size < 19 || !firstPage.body.copyOfRange(0, 8).contentEquals(OPUS_HEAD_MAGIC)) {
+                return emptyMap()
+            }
+            val tagsPacket = ByteArrayOutputStream()
+            var tagsComplete = false
+            while (!tagsComplete && raf.filePointer < fileLen) {
+                val page = readNextPage(raf) ?: break
+                var bodyPos = 0
+                for (seg in page.segmentTable) {
+                    val segLen = seg.toInt() and 0xFF
+                    if (bodyPos + segLen <= page.body.size) {
+                        tagsPacket.write(page.body, bodyPos, segLen)
+                    }
+                    bodyPos += segLen
+                    if (segLen < 255) {
+                        tagsComplete = true
+                        break
+                    }
+                }
+            }
+            val tagsBytes = tagsPacket.toByteArray()
+            val vorbisTag: VorbisCommentTag = if (
+                tagsBytes.size >= 16 &&
+                tagsBytes.copyOfRange(0, 8).contentEquals(OPUS_TAGS_MAGIC)
+            ) {
+                val commentBytes = tagsBytes.copyOfRange(8, tagsBytes.size)
+                runCatching { VorbisCommentReader().read(commentBytes, false, null) }.getOrNull() ?: return emptyMap()
+            } else {
+                return emptyMap()
+            }
+            val out = LinkedHashMap<String, String>()
+            for (key in keys) {
+                val v = runCatching { vorbisTag.getFirst(key) }.getOrNull()?.trim()
+                    ?: runCatching { vorbisTag.getFirst(key.uppercase()) }.getOrNull()?.trim()
+                    ?: runCatching { vorbisTag.getFirst(key.lowercase()) }.getOrNull()?.trim()
+                if (!v.isNullOrEmpty()) {
+                    out[key.uppercase()] = v
+                }
+            }
+            out
+        }
+    }.getOrDefault(emptyMap())
+
     fun read(file: File): TagSnapshot {
         RandomAccessFile(file, "r").use { raf ->
             val fileLen = raf.length()
