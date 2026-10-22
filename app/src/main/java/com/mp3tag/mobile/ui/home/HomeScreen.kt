@@ -27,6 +27,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.CardDefaults
@@ -65,6 +66,7 @@ private data class HomeTileItem(
 fun HomeScreen(
     onOpenTagEditor: () -> Unit,
     onOpenFileManager: () -> Unit,
+    onOpenSpectrum: () -> Unit,
     onOpenAutomate: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
@@ -91,6 +93,16 @@ fun HomeScreen(
             containerColor = scheme.secondaryContainer,
             contentColor = scheme.onSecondaryContainer,
             onClick = onOpenFileManager,
+        ),
+        HomeTileItem(
+            id = "spectrum",
+            title = "Spectrum analysis",
+            subtitle = "Spectrogram and cutoff check. Spots upsampled files and lossy sources hiding in lossless",
+            badge = "Hi-res check",
+            icon = Icons.Filled.GraphicEq,
+            containerColor = scheme.surfaceVariant,
+            contentColor = scheme.onSurfaceVariant,
+            onClick = onOpenSpectrum,
         ),
         HomeTileItem(
             id = "automate",

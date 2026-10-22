@@ -43,6 +43,7 @@ import com.mp3tag.mobile.data.prefs.Id3Version
 import com.mp3tag.mobile.data.prefs.PerformanceMode
 import com.mp3tag.mobile.data.prefs.ThemeMode
 import com.mp3tag.mobile.ui.automate.AutomateScreen
+import com.mp3tag.mobile.ui.spectrum.SpectrumScreen
 import com.mp3tag.mobile.ui.browser.BrowserScreen
 import com.mp3tag.mobile.ui.browser.BrowserViewModel
 import com.mp3tag.mobile.ui.common.EmptyState
@@ -75,6 +76,7 @@ sealed interface Screen {
     data object Browser : Screen
     data object FileManager : Screen
     data object Automate : Screen
+    data object Spectrum : Screen
     data class Settings(val returnTo: Screen = Home) : Screen
     data class Editor(
         val paths: List<String>,
@@ -128,6 +130,10 @@ class AppViewModel(application: android.app.Application) : AndroidViewModel(appl
 
     fun openAutomate() {
         _screen.value = Screen.Automate
+    }
+
+    fun openSpectrum() {
+        _screen.value = Screen.Spectrum
     }
 
     fun openEditor(paths: List<String>, returnTo: Screen = Screen.Browser) {
@@ -208,8 +214,13 @@ fun Mp3tagApp(appViewModel: AppViewModel = viewModel()) {
                 Screen.Home -> HomeScreen(
                     onOpenTagEditor = appViewModel::openTagEditor,
                     onOpenFileManager = appViewModel::openFileManager,
+                    onOpenSpectrum = appViewModel::openSpectrum,
                     onOpenAutomate = appViewModel::openAutomate,
                     onOpenSettings = { appViewModel.openSettings(Screen.Home) },
+                )
+
+                Screen.Spectrum -> SpectrumScreen(
+                    onBack = appViewModel::openHome,
                 )
 
                 Screen.Browser -> BrowserScreen(
@@ -257,7 +268,7 @@ fun Mp3tagApp(appViewModel: AppViewModel = viewModel()) {
             }
 
             BackHandler(
-                enabled = screen is Screen.Settings || screen is Screen.Automate
+                enabled = screen is Screen.Settings || screen is Screen.Automate || screen is Screen.Spectrum
             ) {
                 appViewModel.back()
             }

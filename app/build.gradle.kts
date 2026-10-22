@@ -12,8 +12,8 @@ android {
         applicationId = "com.mp3tag.mobile"
         minSdk = 31          // Android 12
         targetSdk = 36
-        versionCode = 10
-        versionName = "0.4.2"
+        versionCode = 12
+        versionName = "0.5.1"
         base.archivesName.set("mp3tag-mobile-v$versionName")
     }
 
@@ -66,4 +66,6 @@ dependencies {
 
     // Tagging engine: MP3 (ID3v1/v2.3/v2.4), FLAC, MP4/M4A, Ogg, WAV (RIFF INFO + ID3), DSF (DSD)
     implementation("net.jthink:jaudiotagger:3.0.1")
+
+    testImplementation("junit:junit:4.13.2")
 }
