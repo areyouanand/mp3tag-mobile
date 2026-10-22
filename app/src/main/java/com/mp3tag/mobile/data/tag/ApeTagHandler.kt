@@ -186,6 +186,10 @@ internal object ApeTagHandler {
     }
 
     fun write(file: File, request: WriteRequest) {
+        writeSafely(file) { temp -> writeInPlace(temp, request) }
+    }
+
+    private fun writeInPlace(file: File, request: WriteRequest) {
         RandomAccessFile(file, "rw").use { raf ->
             val fileLen = raf.length()
             val parsed = locateAndParseApeTag(raf, fileLen)

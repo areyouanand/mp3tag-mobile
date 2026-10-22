@@ -174,6 +174,10 @@ internal object DffTagHandler {
     }
 
     fun write(file: File, request: WriteRequest, options: WriteOptions) {
+        writeSafely(file) { temp -> writeInPlace(temp, request, options) }
+    }
+
+    private fun writeInPlace(file: File, request: WriteRequest, options: WriteOptions) {
         RandomAccessFile(file, "rw").use { raf ->
             val fileLen = raf.length()
             require(fileLen >= 16L) { "Not a valid DFF file" }
