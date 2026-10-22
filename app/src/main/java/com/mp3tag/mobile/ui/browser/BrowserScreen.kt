@@ -279,6 +279,11 @@ fun BrowserScreen(
                             message = state.statusMessage,
                             onDismiss = viewModel::dismissStatus,
                         )
+                        FolderSummary(
+                            folderCount = filteredDirs.size,
+                            fileCount = filteredFiles.size,
+                            hasSelection = hasSelection,
+                        )
                         Box(
                             modifier = Modifier
                                 .weight(1f)
@@ -345,6 +350,12 @@ fun BrowserScreen(
                         }
                     }
 
+                    FolderSummary(
+                        folderCount = filteredDirs.size,
+                        fileCount = filteredFiles.size,
+                        hasSelection = hasSelection,
+                    )
+
                     Box(Modifier.weight(1f).fillMaxWidth()) {
                         BrowserListContent(
                             state = state,
@@ -365,7 +376,7 @@ fun BrowserScreen(
                 Box(
                     modifier = Modifier
                         .matchParentSize()
-                        .background(Color.Black.copy(alpha = 0.45f)),
+                        .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.45f)),
                     contentAlignment = Alignment.Center,
                 ) {
                     Surface(
@@ -493,6 +504,36 @@ fun BrowserScreen(
                 TextButton(onClick = { storageDialogOpen = false }) { Text("Cancel") }
             },
         )
+    }
+}
+
+@Composable
+private fun FolderSummary(
+    folderCount: Int,
+    fileCount: Int,
+    hasSelection: Boolean,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 4.dp),
+    ) {
+        Text(
+            text = "$folderCount folder(s) · $fileCount audio file(s)",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        if (!hasSelection && fileCount > 0) {
+            Text(
+                text = "Tap to select · long-press a file to edit it",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.outline,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }
 
