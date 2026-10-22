@@ -1,6 +1,6 @@
 package com.mp3tag.mobile.ui.home
 
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,17 +13,13 @@ import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.GridItemSpan
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.FolderOpen
@@ -31,25 +27,29 @@ import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.mp3tag.mobile.data.prefs.DesignLanguage
 import com.mp3tag.mobile.ui.common.rememberAdaptiveWindowInfo
 import com.mp3tag.mobile.ui.theme.LocalDesignLanguage
+import kotlin.math.abs
 
 private data class HomeTileItem(
     val id: String,
@@ -74,6 +74,7 @@ fun HomeScreen(
 ) {
     val windowInfo = rememberAdaptiveWindowInfo()
     val scheme = MaterialTheme.colorScheme
+    val density = LocalDensity.current
 
     val tiles = listOf(
         HomeTileItem(
@@ -138,10 +139,18 @@ fun HomeScreen(
         ),
     )
 
-    val gridColumns = when {
-        windowInfo.widthDp >= 900 -> 3
-        else -> 2
+    val totalItems = tiles.size * 2000
+    val startIndex = tiles.size * 1000
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = startIndex)
+
+    val centeredIndex by remember {
+        derivedStateOf {
+            val info = listState.layoutInfo
+            val viewportCenter = info.viewportStartOffset + info.viewportSize.width / 2f
+            info.visibleItemsInfo.minByOrNull { abs((it.offset + it.size / 2f) - viewportCenter) }?.index ?: startIndex
+        }
     }
+    val centeredTile = tiles[centeredIndex % tiles.size]
 
     Scaffold(
         topBar = {
@@ -166,131 +175,134 @@ fun HomeScreen(
         },
     ) { padding ->
         Box(
-            contentAlignment = Alignment.TopCenter,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
                 .windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal)),
         ) {
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(gridColumns),
-                contentPadding = PaddingValues(16.dp),
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
-                modifier = Modifier
-                    .widthIn(max = 1080.dp)
-                    .fillMaxSize(),
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                items(
-                    items = tiles,
-                    key = { it.id },
-                ) { tile ->
-                    HomeGridCard(
-                        tile = tile,
-                        compactHeight = windowInfo.isCompactHeight,
-                    )
-                }
-
-                item(span = { GridItemSpan(maxLineSpan) }) {
-                    Spacer(Modifier.navigationBarsPadding().height(12.dp))
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun HomeGridCard(
-    tile: HomeTileItem,
-    compactHeight: Boolean,
-) {
-    val designLanguage = LocalDesignLanguage.current
-    val borderColor = when (designLanguage) {
-        DesignLanguage.LIQUID_GLASS -> tile.contentColor.copy(alpha = 0.28f)
-        DesignLanguage.HALO -> MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
-        else -> tile.contentColor.copy(alpha = 0.08f)
-    }
-    val borderWidth = when (designLanguage) {
-        DesignLanguage.LIQUID_GLASS,
-        DesignLanguage.HALO -> 1.5.dp
-        else -> 0.5.dp
-    }
-    val containerColor = when (designLanguage) {
-        DesignLanguage.LIQUID_GLASS -> tile.containerColor.copy(alpha = 0.86f)
-        else -> tile.containerColor
-    }
-
-    OutlinedCard(
-        onClick = tile.onClick,
-        shape = MaterialTheme.shapes.extraLarge,
-        border = BorderStroke(borderWidth, borderColor),
-        colors = CardDefaults.outlinedCardColors(
-            containerColor = containerColor,
-            contentColor = tile.contentColor,
-        ),
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = if (compactHeight) 148.dp else 188.dp),
-    ) {
-        Column(
-            verticalArrangement = Arrangement.SpaceBetween,
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp),
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Surface(
-                    shape = MaterialTheme.shapes.large,
-                    color = tile.contentColor.copy(alpha = 0.14f),
-                    modifier = Modifier.size(48.dp),
+                Spacer(Modifier.height(24.dp))
+                LazyRow(
+                    state = listState,
+                    contentPadding = PaddingValues(horizontal = 40.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(260.dp),
                 ) {
-                    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                        Icon(
-                            imageVector = tile.icon,
-                            contentDescription = null,
-                            tint = tile.contentColor,
-                            modifier = Modifier.size(26.dp),
-                        )
+                    items(
+                        count = totalItems,
+                        key = { it },
+                    ) { index ->
+                        val tile = tiles[index % tiles.size]
+                        val itemInfo = listState.layoutInfo.visibleItemsInfo.find { it.key == index }
+                        val viewportCenter = listState.layoutInfo.viewportStartOffset +
+                            listState.layoutInfo.viewportSize.width / 2f
+                        val itemCenter = itemInfo?.let { it.offset + it.size / 2f } ?: viewportCenter
+                        val distance = itemCenter - viewportCenter
+                        val itemWidth = itemInfo?.size?.toFloat()?.coerceAtLeast(1f) ?: 220f
+                        val normalized = (distance / itemWidth).coerceIn(-3f, 3f)
+                        val scale = (1f - abs(normalized) * 0.18f).coerceIn(0.62f, 1f)
+                        val alpha = (1f - abs(normalized) * 0.35f).coerceIn(0.35f, 1f)
+                        val rotation = normalized * 38f
+
+                        Surface(
+                            onClick = tile.onClick,
+                            shape = MaterialTheme.shapes.extraLarge,
+                            color = tile.containerColor,
+                            contentColor = tile.contentColor,
+                            modifier = Modifier
+                                .size(width = 220.dp, height = 240.dp)
+                                .graphicsLayer {
+                                    rotationY = rotation
+                                    scaleX = scale
+                                    scaleY = scale
+                                    this.alpha = alpha
+                                    cameraDistance = 16f * density.density
+                                },
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(16.dp),
+                                verticalArrangement = Arrangement.SpaceBetween,
+                            ) {
+                                Surface(
+                                    shape = MaterialTheme.shapes.large,
+                                    color = tile.contentColor.copy(alpha = 0.14f),
+                                    modifier = Modifier.size(48.dp),
+                                ) {
+                                    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                                        Icon(
+                                            imageVector = tile.icon,
+                                            contentDescription = null,
+                                            tint = tile.contentColor,
+                                            modifier = Modifier.size(26.dp),
+                                        )
+                                    }
+                                }
+                                if (tile.badge != null) {
+                                    Surface(
+                                        shape = MaterialTheme.shapes.small,
+                                        color = tile.contentColor.copy(alpha = 0.14f),
+                                    ) {
+                                        Text(
+                                            text = tile.badge,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = tile.contentColor,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                        )
+                                    }
+                                }
+                                Spacer(Modifier.height(8.dp))
+                                Column {
+                                    Text(
+                                        text = tile.title,
+                                        style = MaterialTheme.typography.titleLarge,
+                                        color = tile.contentColor,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    Spacer(Modifier.height(4.dp))
+                                    Text(
+                                        text = tile.subtitle,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = tile.contentColor.copy(alpha = 0.82f),
+                                        maxLines = 3,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
-                if (tile.badge != null) {
-                    Surface(
-                        shape = MaterialTheme.shapes.small,
-                        color = tile.contentColor.copy(alpha = 0.14f),
-                    ) {
-                        Text(
-                            text = tile.badge,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = tile.contentColor,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        )
-                    }
-                }
-            }
 
-            Spacer(Modifier.height(if (compactHeight) 10.dp else 18.dp))
-
-            Column {
+                Spacer(Modifier.height(24.dp))
                 Text(
-                    text = tile.title,
-                    style = MaterialTheme.typography.titleLarge,
-                    color = tile.contentColor,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                    text = centeredTile.title,
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
-                Spacer(Modifier.height(4.dp))
                 Text(
-                    text = tile.subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = tile.contentColor.copy(alpha = 0.82f),
-                    maxLines = 3,
+                    text = centeredTile.subtitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .padding(horizontal = 32.dp)
+                        .widthIn(max = 520.dp),
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = "Swipe to browse",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
