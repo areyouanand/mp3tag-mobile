@@ -12,6 +12,7 @@ import com.mp3tag.mobile.data.spectrum.ContainerProbe
 import com.mp3tag.mobile.data.spectrum.PcmDecoder
 import com.mp3tag.mobile.data.spectrum.SpectrumAnalyzer
 import com.mp3tag.mobile.data.spectrum.SpectrumReport
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -20,6 +21,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 data class SpectrumUiState(
+    val filePath: String? = null,
     val fileName: String? = null,
     val loading: Boolean = false,
     val report: SpectrumReport? = null,
@@ -31,6 +33,58 @@ class SpectrumViewModel(application: Application) : AndroidViewModel(application
 
     private val _state = MutableStateFlow(SpectrumUiState())
     val state: StateFlow<SpectrumUiState> = _state.asStateFlow()
+
+    fun analyze(path: String) {
+        analyze(File(path))
+    }
+
+    fun analyze(file: File) {
+        val name = file.name.ifBlank { "audio file" }
+        val path = file.absolutePath
+        _state.value = SpectrumUiState(filePath = path, fileName = name, loading = true)
+        val extension = file.extension.lowercase()
+        val lossless = extension in LOSSLESS_EXTENSIONS
+        val unsupported = extension in UNSUPPORTED_EXTENSIONS
+
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.Default) {
+                runCatching {
+                    if (!file.exists() || !file.canRead()) {
+                        error("This file could not be read: $name")
+                    }
+                    if (unsupported) {
+                        error("DSD, Monkey's Audio and WavPack files can't be analysed on this device yet.")
+                    }
+                    val audio = PcmDecoder.decode(file, WINDOW_SECONDS)
+                    val containerBits = if (lossless) {
+                        ContainerProbe.bitsPerSample(file, extension)
+                    } else {
+                        null
+                    }
+                    val report = SpectrumAnalyzer.analyze(audio, lossless, containerBits)
+                    val bitmap = Bitmap.createBitmap(
+                        report.spectrogramPixels,
+                        report.spectrogramWidth,
+                        report.spectrogramHeight,
+                        Bitmap.Config.ARGB_8888,
+                    )
+                    report to bitmap.asImageBitmap()
+                }
+            }
+            _state.value = result.fold(
+                onSuccess = { (report, image) ->
+                    SpectrumUiState(filePath = path, fileName = name, report = report, spectrogram = image)
+                },
+                onFailure = { error ->
+                    SpectrumUiState(
+                        filePath = path,
+                        fileName = name,
+                        error = error.message ?: "This file could not be analysed.",
+                    )
+                },
+            )
+        }
+    }
 
     fun analyze(uri: Uri) {
         val name = displayName(uri)

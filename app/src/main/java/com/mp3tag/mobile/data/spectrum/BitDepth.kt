@@ -2,6 +2,8 @@ package com.mp3tag.mobile.data.spectrum
 
 import android.content.Context
 import android.net.Uri
+import java.io.File
+import java.io.FileInputStream
 import java.io.InputStream
 import java.nio.charset.StandardCharsets
 
@@ -87,6 +89,16 @@ internal object BitDepth {
 
 /** Reads the bit depth from the header of FLAC and WAV files. */
 internal object ContainerProbe {
+
+    fun bitsPerSample(file: File, extension: String): Int? = runCatching {
+        FileInputStream(file).use { stream ->
+            when (extension) {
+                "flac" -> flacBits(stream)
+                "wav", "wave" -> wavBits(stream)
+                else -> null
+            }
+        }
+    }.getOrNull()
 
     fun bitsPerSample(context: Context, uri: Uri, extension: String): Int? = runCatching {
         context.contentResolver.openInputStream(uri)?.use { stream ->

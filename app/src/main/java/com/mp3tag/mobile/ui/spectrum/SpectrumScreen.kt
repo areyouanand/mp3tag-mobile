@@ -1,7 +1,6 @@
 package com.mp3tag.mobile.ui.spectrum
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
@@ -20,9 +19,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -37,8 +37,12 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -48,6 +52,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mp3tag.mobile.data.spectrum.HintSeverity
@@ -55,6 +60,8 @@ import com.mp3tag.mobile.data.spectrum.SpectrumAnalyzer
 import com.mp3tag.mobile.data.spectrum.SpectrumHint
 import com.mp3tag.mobile.data.spectrum.SpectrumReport
 import com.mp3tag.mobile.ui.common.EmptyState
+import com.mp3tag.mobile.ui.filemanager.FileManagerScreen
+import com.mp3tag.mobile.ui.filemanager.FileManagerViewModel
 import kotlin.math.ln
 import kotlin.math.pow
 
@@ -62,21 +69,61 @@ import kotlin.math.pow
 @Composable
 fun SpectrumScreen(
     onBack: () -> Unit,
+    onEditAudioTags: (List<String>) -> Unit = {},
+    initialFilePath: String? = null,
+    fileManagerViewModel: FileManagerViewModel = viewModel(),
     viewModel: SpectrumViewModel = viewModel(),
 ) {
     val state by viewModel.state.collectAsState()
-    val pickFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        uri?.let(viewModel::analyze)
+    var browsingFiles by rememberSaveable { mutableStateOf(initialFilePath == null) }
+
+    LaunchedEffect(initialFilePath) {
+        if (initialFilePath != null && state.filePath != initialFilePath) {
+            browsingFiles = false
+            viewModel.analyze(initialFilePath)
+        }
     }
-    val launchPicker = { pickFile.launch(arrayOf("audio/*", "application/octet-stream")) }
+
+    if (browsingFiles) {
+        FileManagerScreen(
+            onBackHome = onBack,
+            onEditAudioTags = onEditAudioTags,
+            onAnalyzeSpectrum = { path ->
+                browsingFiles = false
+                viewModel.analyze(path)
+            },
+            pickerModeForSpectrum = true,
+            viewModel = fileManagerViewModel,
+        )
+        return
+    }
+
+    val launchPicker = { browsingFiles = true }
+    val handleBackFromReport = {
+        if (initialFilePath != null) {
+            onBack()
+        } else {
+            browsingFiles = true
+        }
+    }
+
+    BackHandler { handleBackFromReport() }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Spectrum analysis") },
                 navigationIcon = {
+                    IconButton(onClick = handleBackFromReport) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    IconButton(onClick = launchPicker, enabled = !state.loading) {
+                        Icon(Icons.Filled.FolderOpen, contentDescription = "Choose audio file")
+                    }
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to Home")
+                        Icon(Icons.Filled.Home, contentDescription = "Back to Home")
                     }
                 },
             )
@@ -115,11 +162,22 @@ fun SpectrumScreen(
                         .padding(horizontal = 16.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Text(
-                        text = state.fileName.orEmpty(),
-                        style = MaterialTheme.typography.titleMedium,
-                        maxLines = 2,
-                    )
+                    Column {
+                        Text(
+                            text = state.fileName.orEmpty(),
+                            style = MaterialTheme.typography.titleMedium,
+                            maxLines = 2,
+                        )
+                        state.filePath?.let { path ->
+                            Text(
+                                text = path,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
 
                     when {
                         state.loading -> Card(modifier = Modifier.fillMaxWidth()) {

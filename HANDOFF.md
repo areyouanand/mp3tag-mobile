@@ -19,7 +19,7 @@ Single user, sideloaded, never going to the Play Store.
   - **WMA / ASF** (`.wma`/`.asf`)
   - **APE** (Monkey's Audio `.ape`) & **WavPack** (`.wv`) via APEv2 (`APETAGEX`)
   - **DSF** (DSD) & **DFF** (DSDIFF `.dff`, embedded `"ID3 "` chunk in `"FRM8"`, ID3v2.3 / ID3v2.4 selectable)
-- versionName 0.6.1 / versionCode 22 (v0.1.0 phase 1, v0.2.1 phase 2, v0.2.2 adaptive UI + hardware scaling, v0.3.0 Home grid + File Manager + Automate, v0.3.1 folder selection + versioned APK/releases, v0.3.2 Theme Screen mode & Design language selector, v0.3.3 roadmap cleanup, v0.4.0 Phase 3 extended audio formats, v0.4.1 audio format conversion added to roadmap, v0.4.2 browser folder summary + in-place tag write fix for DFF/APE, v0.5.0 spectrum analysis, v0.5.1 bit-depth check, v0.5.2 unsaved-edit persistence + undo/redo + per-file edit + kept-values report, v0.5.3–0.6.1 free-form custom fields + ReplayGain matching Tag Editor UX + existing RG detection/skip/remove + Opus R128 + iPod/iTunes Cover Flow Home)
+- versionName 0.6.2 / versionCode 23 (v0.1.0 phase 1, v0.2.1 phase 2, v0.2.2 adaptive UI + hardware scaling, v0.3.0 Home grid + File Manager + Automate, v0.3.1 folder selection + versioned APK/releases, v0.3.2 Theme Screen mode & Design language selector, v0.3.3 roadmap cleanup, v0.4.0 Phase 3 extended audio formats, v0.4.1 audio format conversion added to roadmap, v0.4.2 browser folder summary + in-place tag write fix for DFF/APE, v0.5.0 spectrum analysis, v0.5.1 bit-depth check, v0.5.2 unsaved-edit persistence + undo/redo + per-file edit + kept-values report, v0.5.3–0.6.2 free-form custom fields + ReplayGain matching Tag Editor UX + existing RG detection/skip/remove + Opus R128 + iPod/iTunes Cover Flow Home + in-app File Manager for Spectrum analysis)
 
 ## Locked-in product decisions (do not silently change)
 
@@ -44,9 +44,9 @@ Single user, sideloaded, never going to the Play Store.
    forks must not imply endorsement by, or affiliation with, the original Mp3tag (mp3tag.de)
    or its author.
 
-## Current state (v0.6.1 beta — v0.4.1 and older verified on the device; v0.5.4–0.6.1 installed on DX270)
+## Current state (v0.6.2 beta — v0.4.1 and older verified on the device; v0.5.4–0.6.2 installed on DX270)
 
-**Recent additions (v0.5.2–0.6.1)**:
+**Recent additions (v0.5.2–0.6.2)**:
 - **Unsaved edit cache persistence** (`EditorDraftStore`): SHA-256-keyed draft in cache dir survives process death / app kill; cleared on discard or when no edits remain after save.
 - **Undo / redo** in `EditorViewModel` (50-deep stack) with TopAppBar buttons.
 - **Per-file editing from batch screen**: files sheet has an "Edit" button per file opening a single-file editor session.
@@ -54,10 +54,11 @@ Single user, sideloaded, never going to the Play Store.
 - **Free-form custom fields**: `WriteRequest.customFields` and `TagEngine.readCustomFields` read/write ID3 `TXXX` frames (`Id3CustomFields`, including WAV/AIFF inner ID3 tags), VorbisComment arbitrary keys, OpusTags, APEv2 items, and DFF ID3 chunks.
 - **ReplayGain loudness tagging** (`data/replaygain/LoudnessAnalyzer.kt`, `ui/replaygain/ReplayGainScreen.kt`): reuses `BrowserScreen` for selecting folders/files, then opens a Tag-Editor-style analysis & tagging screen with top scan progress banner, dropdown `ModalBottomSheet` selector for Track gain / Album gain / Opus R128 (`R128_TRACK_GAIN` & `R128_ALBUM_GAIN` Q7.8 at -23 LUFS, enabled only when `.opus` files are present), existing ReplayGain tag detection, "Skip files that already have ReplayGain", and "Remove ReplayGain tags".
 - **Home iPod / iTunes Cover Flow** (`ui/home/HomeScreen.kt`): orientation-aware 3D Cover Flow carousel (`rememberSnapFlingBehavior`, overlapping `zIndex` stacks, ~54°/58° inward perspective, glossy album-sleeve gradient + diagonal glass sheen + stage reflection, vertical scroll in portrait and horizontal in landscape) with virtual infinite scroll (2000× tiles).
+- **Spectrum analysis uses in-app File Manager** (`ui/spectrum/SpectrumScreen.kt`, `ui/filemanager/FileManagerScreen.kt`): replaced the system SAF document picker with the in-app `FileManagerScreen` (one-tap audio file analysis, plus "Analyze in Spectrum analysis" from the main File Manager).
 
-**Spectrum analysis** (v0.5.0, bit-depth check v0.5.1; `data/spectrum/`, `ui/spectrum/`, Home tile):
+**Spectrum analysis** (v0.5.0, bit-depth check v0.5.1, in-app File Manager v0.6.2; `data/spectrum/`, `ui/spectrum/`, Home tile):
 - `PcmDecoder`: decodes a 60 s window from the middle of a file to mono float with MediaExtractor +
-  MediaCodec, picked through the system file picker (SAF). Works only for formats Android can decode
+  MediaCodec, picked through the in-app `FileManagerScreen` (`java.io.File`). Works only for formats Android can decode
   (MP3, AAC, FLAC, Opus, Vorbis, and PCM WAV if the device has a decoder). DSD, APE and WavPack are
   refused with a message.
 - `Fft` (radix-2, Hann window, 4096 points) → averaged spectrum, smoothed ±7 bins, and a 480×256 spectrogram.

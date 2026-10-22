@@ -77,7 +77,10 @@ sealed interface Screen {
     data object Browser : Screen
     data object FileManager : Screen
     data object Automate : Screen
-    data object Spectrum : Screen
+    data class Spectrum(
+        val initialPath: String? = null,
+        val returnTo: Screen = Home,
+    ) : Screen
     data object ReplayGain : Screen
     data class Settings(val returnTo: Screen = Home) : Screen
     data class Editor(
@@ -134,8 +137,8 @@ class AppViewModel(application: android.app.Application) : AndroidViewModel(appl
         _screen.value = Screen.Automate
     }
 
-    fun openSpectrum() {
-        _screen.value = Screen.Spectrum
+    fun openSpectrum(initialPath: String? = null, returnTo: Screen = Screen.Home) {
+        _screen.value = Screen.Spectrum(initialPath = initialPath, returnTo = returnTo)
     }
 
     fun openReplayGain() {
@@ -155,6 +158,7 @@ class AppViewModel(application: android.app.Application) : AndroidViewModel(appl
         _screen.value = when (val current = _screen.value) {
             is Screen.Editor -> current.returnTo
             is Screen.Settings -> current.returnTo
+            is Screen.Spectrum -> current.returnTo
             else -> Screen.Home
         }
     }
@@ -220,14 +224,17 @@ fun Mp3tagApp(appViewModel: AppViewModel = viewModel()) {
                 Screen.Home -> HomeScreen(
                     onOpenTagEditor = appViewModel::openTagEditor,
                     onOpenFileManager = appViewModel::openFileManager,
-                    onOpenSpectrum = appViewModel::openSpectrum,
+                    onOpenSpectrum = { appViewModel.openSpectrum() },
                     onOpenReplayGain = appViewModel::openReplayGain,
                     onOpenAutomate = appViewModel::openAutomate,
                     onOpenSettings = { appViewModel.openSettings(Screen.Home) },
                 )
 
-                Screen.Spectrum -> SpectrumScreen(
-                    onBack = appViewModel::openHome,
+                is Screen.Spectrum -> SpectrumScreen(
+                    onBack = appViewModel::back,
+                    onEditAudioTags = { paths -> appViewModel.openEditor(paths, current) },
+                    initialFilePath = current.initialPath,
+                    fileManagerViewModel = fileManagerVm,
                 )
 
                 Screen.ReplayGain -> ReplayGainScreen(
@@ -245,6 +252,7 @@ fun Mp3tagApp(appViewModel: AppViewModel = viewModel()) {
                 Screen.FileManager -> FileManagerScreen(
                     onBackHome = appViewModel::openHome,
                     onEditAudioTags = { paths -> appViewModel.openEditor(paths, Screen.FileManager) },
+                    onAnalyzeSpectrum = { path -> appViewModel.openSpectrum(path, Screen.FileManager) },
                     viewModel = fileManagerVm,
                 )
 

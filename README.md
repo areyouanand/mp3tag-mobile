@@ -12,7 +12,7 @@
 A personal-use Android audio tag editor and file manager that mirrors the workflow of [MP3Tag](https://www.mp3tag.de) for
 Windows, built with Kotlin, Jetpack Compose, and **Material 3 Expressive**.
 
-- Latest stable release: **v0.4.1** · Beta: **v0.6.1-beta** (`versionCode = 22`, branch `beta`)
+- Latest stable release: **v0.4.1** · Beta: **v0.6.2-beta** (`versionCode = 23`, branch `beta`)
 - All releases and downloads: **https://github.com/areyouanand/mp3tag-mobile/releases**
 - Minimum Android version: **12 (API 31)**
 - Uses the **All files access** permission (`MANAGE_EXTERNAL_STORAGE`) so it can browse any folder
@@ -23,16 +23,16 @@ Windows, built with Kotlin, Jetpack Compose, and **Material 3 Expressive**.
 | Channel | Version | Link |
 |---|---|---|
 | Stable (Latest) | v0.4.1 | [Latest release](https://github.com/areyouanand/mp3tag-mobile/releases/latest) |
-| Beta (prerelease) | v0.6.1-beta | [v0.6.1-beta](https://github.com/areyouanand/mp3tag-mobile/releases/tag/v0.6.1-beta) |
+| Beta (prerelease) | v0.6.2-beta | [v0.6.2-beta](https://github.com/areyouanand/mp3tag-mobile/releases/tag/v0.6.2-beta) |
 | All releases | | [releases](https://github.com/areyouanand/mp3tag-mobile/releases) |
 
 Install the APK from a release's **Assets** on your Android device. Beta builds may still have bugs.
 
-## Current status — v0.6.1 (beta)
+## Current status — v0.6.2 (beta)
 
 | Feature | State |
 |---|---|
-| **Spectrum analysis (Home → Spectrum analysis): spectrogram, top-of-sound cutoff, upsampling & lossy-origin hints, bit-depth padding check** | 🧪 Beta v0.5.1 (device testing pending) |
+| **Spectrum analysis (Home → Spectrum analysis): in-app File Manager picker, spectrogram, top-of-sound cutoff, upsampling & lossy-origin hints, bit-depth padding check** | ✅ v0.6.2 |
 | **Folder summary and tap/long-press hint in the browser** | ✅ v0.4.2 |
 | **Safer DFF/APE tag writes (temp copy, replaced only on success)** | ✅ v0.4.2 |
 | **Extended audio formats (Phase 3): Opus (`.opus`), DFF / DSDIFF (`.dff`), Monkey's Audio (`.ape`), WavPack (`.wv`), WMA/ASF (`.wma`/`.asf`), AIFF (`.aif`/`.aiff`/`.aifc`), M4B (`.m4b`)** | ✅ v0.4.0 |

@@ -49,6 +49,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.FlipToBack
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Image
@@ -126,6 +127,8 @@ private val ARCHIVE_EXTENSIONS = setOf("zip", "rar", "7z", "tar", "gz", "bz2")
 fun FileManagerScreen(
     onBackHome: () -> Unit,
     onEditAudioTags: (List<String>) -> Unit,
+    onAnalyzeSpectrum: ((String) -> Unit)? = null,
+    pickerModeForSpectrum: Boolean = false,
     viewModel: FileManagerViewModel = viewModel(),
 ) {
     val state by viewModel.state.collectAsState()
@@ -240,12 +243,22 @@ fun FileManagerScreen(
                             selectedCount = state.selectedPaths.size,
                             singleSelectedPath = state.selectedPaths.singleOrNull(),
                             selectedAudioPaths = selectedAudioPaths,
+                            pickerModeForSpectrum = pickerModeForSpectrum,
                             onCopy = { viewModel.copySelectionToClipboard() },
                             onMove = { viewModel.moveSelectionToClipboard() },
                             onRename = { path -> renameTargetPath = path },
                             onDelete = { deleteConfirmPaths = state.selectedPaths.toList() },
                             onInfo = { viewModel.inspectDetails(state.selectedPaths) },
                             onEditTags = { onEditAudioTags(selectedAudioPaths) },
+                            onAnalyzeSpectrum = if (onAnalyzeSpectrum != null && selectedAudioPaths.isNotEmpty()) {
+                                {
+                                    val target = selectedAudioPaths.first()
+                                    viewModel.clearSelection()
+                                    onAnalyzeSpectrum(target)
+                                }
+                            } else {
+                                null
+                            },
                             onClear = viewModel::clearSelection,
                         )
                     }
@@ -266,6 +279,7 @@ fun FileManagerScreen(
                         filter = filter,
                         onFilterChange = { filter = it },
                         selectedAudioPaths = selectedAudioPaths,
+                        pickerModeForSpectrum = pickerModeForSpectrum,
                         onOpenVolume = viewModel::openVolume,
                         onOpenDir = { viewModel.open(it) },
                         onPaste = viewModel::pasteHere,
@@ -276,6 +290,15 @@ fun FileManagerScreen(
                         onDelete = { deleteConfirmPaths = state.selectedPaths.toList() },
                         onInfo = { viewModel.inspectDetails(state.selectedPaths) },
                         onEditTags = { onEditAudioTags(selectedAudioPaths) },
+                        onAnalyzeSpectrum = if (onAnalyzeSpectrum != null && selectedAudioPaths.isNotEmpty()) {
+                            {
+                                val target = selectedAudioPaths.first()
+                                viewModel.clearSelection()
+                                onAnalyzeSpectrum(target)
+                            }
+                        } else {
+                            null
+                        },
                         onClearSelection = viewModel::clearSelection,
                         modifier = Modifier
                             .width(windowInfo.sidePaneWidth)
@@ -291,6 +314,9 @@ fun FileManagerScreen(
                             message = state.statusMessage,
                             onDismiss = viewModel::dismissStatus,
                         )
+                        if (pickerModeForSpectrum) {
+                            SpectrumPickerHintBanner()
+                        }
                         BreadcrumbStrip(
                             directory = state.directory,
                             volumes = state.volumes,
@@ -306,6 +332,8 @@ fun FileManagerScreen(
                                         viewModel.toggleSelect(entry)
                                     } else if (entry.isDirectory) {
                                         viewModel.open(entry.file)
+                                    } else if (pickerModeForSpectrum && entry.isAudio && onAnalyzeSpectrum != null) {
+                                        onAnalyzeSpectrum(entry.path)
                                     } else {
                                         contextEntryPath = entry.path
                                     }
@@ -324,6 +352,9 @@ fun FileManagerScreen(
                         message = state.statusMessage,
                         onDismiss = viewModel::dismissStatus,
                     )
+                    if (pickerModeForSpectrum) {
+                        SpectrumPickerHintBanner()
+                    }
 
                     OutlinedTextField(
                         value = filter,
@@ -394,6 +425,8 @@ fun FileManagerScreen(
                                     viewModel.toggleSelect(entry)
                                 } else if (entry.isDirectory) {
                                     viewModel.open(entry.file)
+                                } else if (pickerModeForSpectrum && entry.isAudio && onAnalyzeSpectrum != null) {
+                                    onAnalyzeSpectrum(entry.path)
                                 } else {
                                     contextEntryPath = entry.path
                                 }
@@ -662,6 +695,17 @@ fun FileManagerScreen(
                     )
                 }
                 if (activeContextEntry.isAudio) {
+                    if (onAnalyzeSpectrum != null) {
+                        ListItem(
+                            headlineContent = { Text("Analyze in Spectrum analysis") },
+                            leadingContent = { Icon(Icons.Filled.GraphicEq, contentDescription = null) },
+                            modifier = Modifier.clickable {
+                                val path = activeContextEntry.path
+                                contextEntryPath = null
+                                onAnalyzeSpectrum(path)
+                            },
+                        )
+                    }
                     ListItem(
                         headlineContent = { Text("Edit audio tags in Tag Editor") },
                         leadingContent = { Icon(Icons.Filled.Edit, contentDescription = null) },
@@ -949,6 +993,28 @@ private fun DetailLine(label: String, value: String) {
 }
 
 @Composable
+private fun SpectrumPickerHintBanner() {
+    Surface(
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+        ) {
+            Icon(Icons.Filled.GraphicEq, contentDescription = null)
+            Spacer(Modifier.width(10.dp))
+            Text(
+                text = "Tap an audio file to analyze its spectrum • long-press for file manager actions",
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+@Composable
 private fun StatusBanner(
     message: String?,
     onDismiss: () -> Unit,
@@ -1019,12 +1085,14 @@ private fun SelectionBottomBar(
     selectedCount: Int,
     singleSelectedPath: String?,
     selectedAudioPaths: List<String>,
+    pickerModeForSpectrum: Boolean,
     onCopy: () -> Unit,
     onMove: () -> Unit,
     onRename: (String) -> Unit,
     onDelete: () -> Unit,
     onInfo: () -> Unit,
     onEditTags: () -> Unit,
+    onAnalyzeSpectrum: (() -> Unit)?,
     onClear: () -> Unit,
 ) {
     Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh) {
@@ -1043,7 +1111,18 @@ private fun SelectionBottomBar(
                     style = MaterialTheme.typography.titleSmall,
                 )
                 Spacer(Modifier.weight(1f))
-                if (selectedAudioPaths.isNotEmpty()) {
+                if (onAnalyzeSpectrum != null && (pickerModeForSpectrum || selectedAudioPaths.size == 1)) {
+                    Button(
+                        onClick = onAnalyzeSpectrum,
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                    ) {
+                        Icon(Icons.Filled.GraphicEq, contentDescription = null)
+                        Spacer(Modifier.width(4.dp))
+                        Text("Analyze")
+                    }
+                    Spacer(Modifier.width(6.dp))
+                }
+                if (selectedAudioPaths.isNotEmpty() && !pickerModeForSpectrum) {
                     FilledTonalButton(
                         onClick = onEditTags,
                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
@@ -1158,6 +1237,7 @@ private fun FileManagerSidePane(
     filter: String,
     onFilterChange: (String) -> Unit,
     selectedAudioPaths: List<String>,
+    pickerModeForSpectrum: Boolean,
     onOpenVolume: (StorageVolumeInfo) -> Unit,
     onOpenDir: (File) -> Unit,
     onPaste: () -> Unit,
@@ -1168,6 +1248,7 @@ private fun FileManagerSidePane(
     onDelete: () -> Unit,
     onInfo: () -> Unit,
     onEditTags: () -> Unit,
+    onAnalyzeSpectrum: (() -> Unit)?,
     onClearSelection: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -1280,6 +1361,13 @@ private fun FileManagerSidePane(
                             Icon(Icons.Filled.Delete, contentDescription = null)
                             Spacer(Modifier.width(4.dp))
                             Text("Delete")
+                        }
+                        if (onAnalyzeSpectrum != null && (pickerModeForSpectrum || selectedAudioPaths.size == 1)) {
+                            Button(onClick = onAnalyzeSpectrum) {
+                                Icon(Icons.Filled.GraphicEq, contentDescription = null)
+                                Spacer(Modifier.width(4.dp))
+                                Text("Analyze spectrum")
+                            }
                         }
                         if (selectedAudioPaths.isNotEmpty()) {
                             Button(onClick = onEditTags) {

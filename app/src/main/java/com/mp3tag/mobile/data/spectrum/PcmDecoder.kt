@@ -6,6 +6,8 @@ import android.media.MediaCodec
 import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.net.Uri
+import java.io.File
+import java.io.FileInputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
@@ -25,43 +27,59 @@ internal class DecodedAudio(
  */
 internal object PcmDecoder {
 
+    fun decode(file: File, windowSeconds: Double): DecodedAudio {
+        val extractor = MediaExtractor()
+        try {
+            FileInputStream(file).use { fis ->
+                extractor.setDataSource(fis.fd)
+            }
+            return decodeExtractor(extractor, windowSeconds)
+        } finally {
+            extractor.release()
+        }
+    }
+
     fun decode(context: Context, uri: Uri, windowSeconds: Double): DecodedAudio {
         val extractor = MediaExtractor()
         try {
             extractor.setDataSource(context, uri, null)
-            val track = (0 until extractor.trackCount).firstOrNull {
-                extractor.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true
-            } ?: error("No audio track found in this file.")
-            extractor.selectTrack(track)
-            val format = extractor.getTrackFormat(track)
-            val mime = format.getString(MediaFormat.KEY_MIME) ?: error("Unknown audio format.")
-            val durationUs = if (format.containsKey(MediaFormat.KEY_DURATION)) {
-                format.getLong(MediaFormat.KEY_DURATION)
-            } else {
-                0L
-            }
-            val fileSeconds = durationUs / 1_000_000.0
-
-            if (fileSeconds > windowSeconds) {
-                val startUs = ((fileSeconds - windowSeconds) / 2.0 * 1_000_000.0).toLong()
-                extractor.seekTo(startUs, MediaExtractor.SEEK_TO_CLOSEST_SYNC)
-            }
-
-            val codec = try {
-                MediaCodec.createDecoderByType(mime)
-            } catch (e: Exception) {
-                error("This device has no decoder for $mime.")
-            }
-            try {
-                codec.configure(format, null, null, 0)
-                codec.start()
-                return decodeLoop(extractor, codec, format, mime, windowSeconds, fileSeconds)
-            } finally {
-                runCatching { codec.stop() }
-                codec.release()
-            }
+            return decodeExtractor(extractor, windowSeconds)
         } finally {
             extractor.release()
+        }
+    }
+
+    private fun decodeExtractor(extractor: MediaExtractor, windowSeconds: Double): DecodedAudio {
+        val track = (0 until extractor.trackCount).firstOrNull {
+            extractor.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true
+        } ?: error("No audio track found in this file.")
+        extractor.selectTrack(track)
+        val format = extractor.getTrackFormat(track)
+        val mime = format.getString(MediaFormat.KEY_MIME) ?: error("Unknown audio format.")
+        val durationUs = if (format.containsKey(MediaFormat.KEY_DURATION)) {
+            format.getLong(MediaFormat.KEY_DURATION)
+        } else {
+            0L
+        }
+        val fileSeconds = durationUs / 1_000_000.0
+
+        if (fileSeconds > windowSeconds) {
+            val startUs = ((fileSeconds - windowSeconds) / 2.0 * 1_000_000.0).toLong()
+            extractor.seekTo(startUs, MediaExtractor.SEEK_TO_CLOSEST_SYNC)
+        }
+
+        val codec = try {
+            MediaCodec.createDecoderByType(mime)
+        } catch (e: Exception) {
+            error("This device has no decoder for $mime.")
+        }
+        try {
+            codec.configure(format, null, null, 0)
+            codec.start()
+            return decodeLoop(extractor, codec, format, mime, windowSeconds, fileSeconds)
+        } finally {
+            runCatching { codec.stop() }
+            codec.release()
         }
     }
 
