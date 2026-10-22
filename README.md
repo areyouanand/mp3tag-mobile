@@ -90,7 +90,7 @@ Pushing to `master` runs a GitHub Action that builds the versioned APK (`mp3tag-
 and publishes/updates the corresponding versioned GitHub Release (`v<versionName>`, marked as **Latest**):
 
 - Latest release page: `https://github.com/areyouanand/mp3tag-mobile/releases/latest`
-- Beta builds: pushes to the `beta` branch publish a prerelease `v<versionName>-beta` that is never marked Latest, for example [v0.5.1-beta](https://github.com/areyouanand/mp3tag-mobile/releases/tag/v0.5.1-beta).
+- Beta builds: pushes to the `beta` branch publish a prerelease `v<versionName>-beta` that is never marked Latest, for example [v0.6.3-beta](https://github.com/areyouanand/mp3tag-mobile/releases/tag/v0.6.3-beta).
 - Current release (`v0.4.1`): `https://github.com/areyouanand/mp3tag-mobile/releases/tag/v0.4.1`
 
 All builds — local and CI — sign with the committed shared debug keystore, so CI-built APKs install
@@ -101,11 +101,11 @@ over previously installed versions without uninstalling.
 1. **Grant All-files access**: On first launch, grant **All files access** in the system screen opened by the app.
 2. **Home Cover Flow**: Choose from the six Cover Flow tiles (tap a side cover to glide it to center; tap the centered cover to open it):
    - **Tag editor**: Browse folders across Internal storage, SD card, and USB OTG. Tap audio files or folder checkboxes to multi-select (and tap **Edit**), or long-press any file or folder to edit its tags immediately.
-   - **File manager**: Full storage file manager with breadcrumb path bar, search, Copy, Move (Cut), Paste, Rename, Delete, New Folder, Sort (Name, Date, Size, Type; Ascending/Descending), Show/Hide `.dot` hidden files, Properties/Details, and one-tap **Edit tags** when audio files are selected.
-   - **Spectrum analysis**: Spectrogram and cutoff check to spot upsampled or lossy transcodes.
+   - **File manager**: Full storage file manager with breadcrumb path bar, search, Copy, Move (Cut), Paste, Rename, Delete, New Folder, Sort (Name, Date, Size, Type; Ascending/Descending), Show/Hide `.dot` hidden files, Properties/Details, and one-tap **Edit tags** or **Analyze in Spectrum analysis** when audio files are selected.
+   - **Spectrum analysis**: Uses the in-app File Manager to pick any audio file and inspect its spectrogram, top-of-sound frequency cutoff, upsampling/lossy-origin hints, and effective bit depth.
    - **ReplayGain**: Analyze track & album loudness and write ReplayGain / Opus R128 tags.
    - **Automate**: Workspace section reserved for upcoming automated tagging and file workflows.
-   - **Settings**: Configure Theme (**Screen mode**: `Auto`, `Dark`, `Light`; **Design language**: `Material 3 Expressive`, `Material You`, `Liquid Glass`, `Halo`), MP3/DSF ID3v2 version (`v2.3` vs `v2.4`), and Device & performance mode (`Auto`, `High performance`, `Low-spec / memory saver`).
+   - **Settings**: Configure Theme (**Screen mode**: `Auto`, `Dark`, `Light`; **Design language**: `Material 3 Expressive`, `Material You`, `Liquid Glass`, `Halo`), MP3/DSD ID3v2 version (`v2.3` vs `v2.4`), ReplayGain defaults, File Manager `.dot` hidden files & history/cache clearing, Device & performance mode (`Auto`, `High performance`, `Low-spec / memory saver`), **Updates** (`Release (Stable)` vs `Beta (Prerelease)` channel selector + live GitHub update checker), and **Developer / About** (`@areyouanand` Vision credit & GitHub links).
 
 ## Project layout
 
@@ -114,26 +114,30 @@ app/src/main/java/com/mp3tag/mobile/
 ├── MainActivity.kt                  # app shell, workspace navigation, all-files permission gate
 ├── data/
 │   ├── fs/FolderScanner.kt          # directory listing, recursive folder audio scan, natural sort
-│   ├── prefs/AppPrefs.kt            # ID3 version, theme, performance mode, recents, saved patterns
+│   ├── prefs/AppPrefs.kt            # ID3 version, theme, update channel, RG defaults, recents, patterns
+│   ├── update/UpdateChecker.kt      # GitHub Releases API update checker (Release vs Beta channel)
+│   ├── replaygain/LoudnessAnalyzer.kt # MediaCodec loudness & peak analyzer (-18 LUFS target)
 │   ├── spectrum/                    # FFT, MediaCodec PCM decoder, analysis rules, bit-depth check
 │   └── tag/
 │       ├── TagData.kt               # models, O(1) hashed CoverImage, editable field catalog
 │       ├── TagEngine.kt             # unified read/write dispatcher across all audio formats
+│       ├── Id3CustomFields.kt       # ID3v2 TXXX custom frame reader/writer
 │       ├── DffTagHandler.kt         # DSDIFF (.dff) FRM8/PROP parser & ID3v2 chunk reader/writer
 │       ├── OpusTagHandler.kt        # Ogg Opus (.opus) OpusHead/OpusTags VorbisComment + page CRC writer
 │       └── ApeTagHandler.kt         # APEv2 (APETAGEX) reader/writer for Monkey's Audio (.ape) & WavPack (.wv)
 ├── ui/
 │   ├── home/HomeScreen.kt           # Cover Flow Home dashboard (Tag editor, File manager, Spectrum, ReplayGain, Automate, Settings)
-│   ├── spectrum/SpectrumScreen.kt   # Spectrum analysis: file picker, spectrogram, curve, hints
+│   ├── spectrum/SpectrumScreen.kt   # Spectrum analysis: in-app File Manager picker, spectrogram, curve, hints
+│   ├── replaygain/ReplayGainScreen.kt # ReplayGain & Opus R128 batch scanner & writer
 │   ├── browser/                     # Tag editor folder & file browser, file/folder multi-select
-│   ├── editor/                      # Tag editor (single & batch, 1-pane & 2-pane, ToolsDialogs)
+│   ├── editor/                      # Tag editor (single & batch, 1-pane & 2-pane, undo/redo, draft cache, ToolsDialogs)
 │   ├── filemanager/                 # Full File Manager (copy, move, paste, rename, delete, sort, info)
 │   ├── automate/AutomateScreen.kt   # Automate workspace placeholder
-│   ├── settings/SettingsScreen.kt   # ID3, theme, and hardware performance settings
+│   ├── settings/SettingsScreen.kt   # Theme, tagging/RG, cache, performance, update checker, Developer & About
 │   ├── common/
 │   │   ├── AdaptiveLayout.kt        # Window size classes & phone/tablet portrait/landscape layout rules
 │   │   └── Common.kt                # Shared UI components
-│   └── theme/Theme.kt               # Material 3 Expressive theme
+│   └── theme/Theme.kt               # Material 3 Expressive, Material You, Liquid Glass & Halo themes
 └── util/
     ├── DeviceProfile.kt             # Hardware tier detection (LOW_SPEC / STANDARD / HIGH_END)
     ├── Format.kt                    # Size/duration formatting + LruCache & OOM-safe ImageDecode
@@ -142,6 +146,10 @@ app/src/main/java/com/mp3tag/mobile/
 
 Tag engine: [JAudioTagger 3.0.1](https://www.jthink.net/jaudiotagger/) + custom binary handlers for
 DSDIFF (`.dff`), Ogg Opus (`.opus`), Monkey's Audio (`.ape`), and WavPack (`.wv`).
+
+## Developer
+
+- **Vision**: [@areyouanand](https://github.com/areyouanand)
 
 ## License
 

@@ -218,7 +218,7 @@ mixed-cover detection. Section sits at the bottom of the editor (user requested)
 
 - **Beta channel**: the `beta` branch is also built by `.github/workflows/build.yml`. Those builds are tagged
   `v<versionName>-beta`, published as **prereleases**, and never marked Latest. `master` stays the stable channel.
-  Current beta: `v0.5.1-beta`.
+  Current beta: `v0.6.3-beta`.
 
 ## Workflow conventions
 
@@ -226,25 +226,24 @@ mixed-cover detection. Section sits at the bottom of the editor (user requested)
 - Branches: day-to-day work and beta releases go on `beta`; `master` gets merged from `beta` once a build is verified on the device
   (message per logical change). Every push green-lights CI automatically.
 - Feature work lives in `app/src/main/java/com/mp3tag/mobile/`:
-  - `MainActivity.kt` — activity, AppViewModel (nav: `Home` / `Browser` (Tag editor) / `FileManager` / `Automate` / `Settings(returnTo)` / `Editor(paths, session, returnTo)`, permission, theme, performance mode)
+  - `MainActivity.kt` — activity, AppViewModel (nav: `Home` / `Browser` (Tag editor) / `FileManager` / `Spectrum(initialPath, returnTo)` / `ReplayGain` / `Automate` / `Settings(returnTo)` / `Editor(paths, session, returnTo)`, permission, theme, performance mode)
   - `data/fs/FolderScanner.kt` — natural sorting, directory listing, recursive audio file collection (`collectAudioFilesRecursively`)
-  - `data/prefs/AppPrefs.kt` — settings, recent folders, last folders (`lastFolder` + `lastFileManagerFolder`), `showHiddenFiles`, saved patterns
-  - `data/tag/TagData.kt`, `TagEngine.kt`, `DffTagHandler.kt`, `OpusTagHandler.kt`, `ApeTagHandler.kt` — models, JAudioTagger engine, and custom DFF/Opus/APEv2 binary handlers
+  - `data/prefs/AppPrefs.kt` — settings, update channel (`RELEASE` / `BETA`), ReplayGain defaults, recent folders, last folders (`lastFolder` + `lastFileManagerFolder`), `showHiddenFiles`, saved patterns
+  - `data/update/UpdateChecker.kt` — live GitHub Releases API checker (`Release` vs `Beta` channel), semantic version & build number comparison, APK asset extraction
+  - `data/replaygain/LoudnessAnalyzer.kt` — MediaCodec PCM loudness & peak scanner (`-18 LUFS` target)
+  - `data/spectrum/` (`PcmDecoder.kt`, `Fft.kt`, `SpectrumAnalyzer.kt`, `BitDepth.kt`) — 60 s midpoint decode, 4096-pt Hann FFT, spectrogram & cutoff/bit-depth analysis
+  - `data/tag/TagData.kt`, `TagEngine.kt`, `Id3CustomFields.kt`, `DffTagHandler.kt`, `OpusTagHandler.kt`, `ApeTagHandler.kt`, `SafeWrite.kt` — models, JAudioTagger engine, custom field readers/writers, and custom DFF/Opus/APEv2 binary handlers
   - `ui/home/` (`HomeScreen`), `ui/filemanager/` (`FileManagerScreen`, `FileManagerViewModel`),
+    `ui/spectrum/` (`SpectrumScreen`, `SpectrumViewModel`), `ui/replaygain/` (`ReplayGainScreen`),
     `ui/automate/` (`AutomateScreen`), `ui/browser/`, `ui/editor/` (`EditorScreen`, `EditorViewModel`,
-    `ToolsDialogs`), `ui/settings/`, `ui/common/` (`Common.kt`, `AdaptiveLayout.kt`),
-    `ui/theme/Theme.kt` (M3 Expressive), `util/` (`DeviceProfile.kt`, `Format.kt` + `ImageDecode`,
+    `EditorDraftStore`, `ToolsDialogs`), `ui/settings/` (`SettingsScreen`), `ui/common/` (`Common.kt`, `AdaptiveLayout.kt`),
+    `ui/theme/Theme.kt` (M3 Expressive, Material You, Liquid Glass, Halo), `util/` (`DeviceProfile.kt`, `Format.kt` + `ImageDecode`,
     `PatternParser.kt`)
-- No tests exist yet; verification = build green + install on device + uiautomator checks.
+- Unit tests in `app/src/test/.../spectrum/`; verification = `./gradlew assembleDebug testDebugUnitTest` + install on device + uiautomator checks.
 
 ## Roadmap
 
 - **Audio format conversion** (blocked, not started in the repo): the prebuilt FFmpegKit binaries were removed from Maven Central and GitHub (only source remains). Plan: build LGPL FFmpeg from the archived ffmpeg-kit source with the NDK, which needs WSL Ubuntu or MSYS2 with make/nasm/pkg-config. This machine has neither yet. A MediaCodec-only fallback was also discussed. It can't output MP3 or decode DSD/APE/WavPack. Goal: convert/transcode audio files between formats (e.g. FLAC/WAV/DSD/APE/WV ↔ MP3/Opus/M4A/FLAC/WAV) while preserving metadata tags and embedded cover art.
 - **Phase 3 remaining**: MusicBrainz + Cover Art Archive + Discogs online metadata and cover lookup.
 - **Automate workspace**: user requested the `Automate` section on the Home grid as a placeholder to be populated with automated tagging/file workflows in a future session.
-- **Free-form custom fields**: possibly support custom tag keys (`TXXX` / Vorbis freeform / MP4 `----:` atoms / APEv2 custom items) beyond the standard ~75-field catalog.
 - Larger libraries: WorkManager for background batch saves, paging for file list.
-- Persist unsaved edit cache across process death (currently lost on app kill) — user was told;
-  may come up.
-- UX ideas from user: show which files keep which values after a batch save; per-file editing
-  launched from the batch screen.
