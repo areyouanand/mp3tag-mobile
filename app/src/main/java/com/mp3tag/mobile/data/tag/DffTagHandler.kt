@@ -279,6 +279,12 @@ internal object DffTagHandler {
             }
         }
 
+        if (request.customFields.isNotEmpty()) {
+            request.customFields.forEach { (key, value) ->
+                Id3CustomFields.write(tag, key, value)
+            }
+        }
+
         when (request.coverAction) {
             CoverAction.NONE -> Unit
             CoverAction.REMOVE -> runCatching { tag.deleteArtworkField() }

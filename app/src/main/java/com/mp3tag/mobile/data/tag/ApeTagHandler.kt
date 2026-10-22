@@ -265,6 +265,21 @@ internal object ApeTagHandler {
                 }
             }
 
+            // Free-form custom fields (native APE items).
+            request.customFields.forEach { (key, value) ->
+                val upper = key.uppercase()
+                if (value.isNullOrBlank()) {
+                    itemMap.remove(upper)
+                } else {
+                    val existingKeyName = itemMap[upper]?.key ?: key
+                    itemMap[upper] = ApeItem(
+                        key = existingKeyName,
+                        flags = ITEM_TYPE_UTF8,
+                        valueBytes = value.trim().toByteArray(Charsets.UTF_8),
+                    )
+                }
+            }
+
             when (request.coverAction) {
                 CoverAction.NONE -> Unit
                 CoverAction.REMOVE -> {

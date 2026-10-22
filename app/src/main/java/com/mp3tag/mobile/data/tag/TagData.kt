@@ -61,6 +61,7 @@ enum class CoverAction { NONE, REPLACE, REMOVE }
  */
 data class WriteRequest(
     val fieldValues: Map<FieldKey, String?> = emptyMap(),
+    val customFields: Map<String, String> = emptyMap(),
     val coverAction: CoverAction = CoverAction.NONE,
     val newCover: CoverImage? = null,
 )

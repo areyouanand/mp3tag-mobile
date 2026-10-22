@@ -11,6 +11,7 @@ import org.jaudiotagger.tag.asf.AsfTag
 import org.jaudiotagger.tag.id3.AbstractID3v2Tag
 import org.jaudiotagger.tag.id3.ID3v23Tag
 import org.jaudiotagger.tag.id3.ID3v24Tag
+import org.jaudiotagger.tag.id3.framebody.FrameBodyTXXX
 import org.jaudiotagger.tag.images.ArtworkFactory
 import org.jaudiotagger.tag.reference.ID3V2Version
 import org.jaudiotagger.tag.wav.WavTag
@@ -138,6 +139,23 @@ object TagEngine {
                 runCatching { tag.deleteField(key) }
             } else {
                 tag.setField(key, value)
+            }
+        }
+
+        // Free-form custom fields (TXXX for ID3, arbitrary keys for VorbisComment).
+        if (request.customFields.isNotEmpty()) {
+            val isId3 = tag is org.jaudiotagger.tag.id3.AbstractID3v2Tag
+            val isVorbis = tag is org.jaudiotagger.tag.vorbiscomment.VorbisCommentTag
+            request.customFields.forEach { (key, value) ->
+                if (isId3) {
+                    val id3 = tag as org.jaudiotagger.tag.id3.AbstractID3v2Tag
+                    Id3CustomFields.write(id3, key, value)
+                } else if (isVorbis) {
+                    val vt = tag as org.jaudiotagger.tag.vorbiscomment.VorbisCommentTag
+                    if (value.isNullOrBlank()) runCatching { vt.deleteField(key) }
+                    else runCatching { vt.setField(key, value) }
+                }
+                // MP4 / ASF custom fields are not handled here yet.
             }
         }
 

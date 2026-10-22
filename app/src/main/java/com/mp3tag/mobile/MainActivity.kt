@@ -51,6 +51,7 @@ import com.mp3tag.mobile.ui.editor.EditorScreen
 import com.mp3tag.mobile.ui.filemanager.FileManagerScreen
 import com.mp3tag.mobile.ui.filemanager.FileManagerViewModel
 import com.mp3tag.mobile.ui.home.HomeScreen
+import com.mp3tag.mobile.ui.replaygain.ReplayGainScreen
 import com.mp3tag.mobile.ui.settings.SettingsScreen
 import com.mp3tag.mobile.ui.theme.Mp3tagTheme
 import com.mp3tag.mobile.util.DeviceProfile
@@ -77,6 +78,7 @@ sealed interface Screen {
     data object FileManager : Screen
     data object Automate : Screen
     data object Spectrum : Screen
+    data object ReplayGain : Screen
     data class Settings(val returnTo: Screen = Home) : Screen
     data class Editor(
         val paths: List<String>,
@@ -134,6 +136,10 @@ class AppViewModel(application: android.app.Application) : AndroidViewModel(appl
 
     fun openSpectrum() {
         _screen.value = Screen.Spectrum
+    }
+
+    fun openReplayGain() {
+        _screen.value = Screen.ReplayGain
     }
 
     fun openEditor(paths: List<String>, returnTo: Screen = Screen.Browser) {
@@ -215,11 +221,16 @@ fun Mp3tagApp(appViewModel: AppViewModel = viewModel()) {
                     onOpenTagEditor = appViewModel::openTagEditor,
                     onOpenFileManager = appViewModel::openFileManager,
                     onOpenSpectrum = appViewModel::openSpectrum,
+                    onOpenReplayGain = appViewModel::openReplayGain,
                     onOpenAutomate = appViewModel::openAutomate,
                     onOpenSettings = { appViewModel.openSettings(Screen.Home) },
                 )
 
                 Screen.Spectrum -> SpectrumScreen(
+                    onBack = appViewModel::openHome,
+                )
+
+                Screen.ReplayGain -> ReplayGainScreen(
                     onBack = appViewModel::openHome,
                 )
 

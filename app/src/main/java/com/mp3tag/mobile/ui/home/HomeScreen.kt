@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -67,6 +68,7 @@ fun HomeScreen(
     onOpenTagEditor: () -> Unit,
     onOpenFileManager: () -> Unit,
     onOpenSpectrum: () -> Unit,
+    onOpenReplayGain: () -> Unit,
     onOpenAutomate: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
@@ -103,6 +105,16 @@ fun HomeScreen(
             containerColor = scheme.surfaceVariant,
             contentColor = scheme.onSurfaceVariant,
             onClick = onOpenSpectrum,
+        ),
+        HomeTileItem(
+            id = "replaygain",
+            title = "ReplayGain",
+            subtitle = "Analyze loudness and write ReplayGain tags for consistent playback volume",
+            badge = "Loudness",
+            icon = Icons.Filled.Tune,
+            containerColor = scheme.tertiaryContainer,
+            contentColor = scheme.onTertiaryContainer,
+            onClick = onOpenReplayGain,
         ),
         HomeTileItem(
             id = "automate",

@@ -203,6 +203,10 @@ internal object OpusTagHandler {
                 existingVorbisTag.setField(key, value)
             }
         }
+        request.customFields.forEach { (key, value) ->
+            if (value.isNullOrBlank()) runCatching { existingVorbisTag.deleteField(key) }
+            else runCatching { existingVorbisTag.setField(key, value) }
+        }
 
         when (request.coverAction) {
             CoverAction.NONE -> Unit
