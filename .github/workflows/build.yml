@@ -2,7 +2,7 @@ name: Build APK
 
 on:
   push:
-    branches: [master]
+    branches: [master, beta]
     tags: ['v*']
   workflow_dispatch:
 
@@ -28,11 +28,18 @@ jobs:
           VERSION_NAME=$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/build.gradle.kts)
           VERSION_CODE=$(grep -oP 'versionCode\s*=\s*\K[0-9]+' app/build.gradle.kts)
           TAG_NAME="v${VERSION_NAME}"
+          IS_BETA=false
+          if [ "${GITHUB_REF_NAME}" = "beta" ]; then
+            IS_BETA=true
+            TAG_NAME="${TAG_NAME}-beta"
+          fi
           APK_NAME="mp3tag-mobile-${TAG_NAME}-debug.apk"
           echo "version_name=${VERSION_NAME}" >> "$GITHUB_OUTPUT"
           echo "version_code=${VERSION_CODE}" >> "$GITHUB_OUTPUT"
           echo "tag=${TAG_NAME}" >> "$GITHUB_OUTPUT"
           echo "apk_name=${APK_NAME}" >> "$GITHUB_OUTPUT"
+          echo "build_apk=mp3tag-mobile-v${VERSION_NAME}-debug.apk" >> "$GITHUB_OUTPUT"
+          echo "is_beta=${IS_BETA}" >> "$GITHUB_OUTPUT"
 
       - name: Make gradlew executable
         run: chmod +x gradlew
@@ -41,7 +48,7 @@ jobs:
         run: ./gradlew assembleDebug --no-daemon
 
       - name: Prepare versioned APK
-        run: cp "app/build/outputs/apk/debug/${{ steps.version.outputs.apk_name }}" "${{ steps.version.outputs.apk_name }}"
+        run: cp "app/build/outputs/apk/debug/${{ steps.version.outputs.build_apk }}" "${{ steps.version.outputs.apk_name }}"
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
@@ -63,13 +70,19 @@ jobs:
 
           Download \`${APK}\` and open it on your Android device to install or update."
 
+          if [ "${{ steps.version.outputs.is_beta }}" = "true" ]; then
+            RELEASE_FLAGS="--prerelease"
+          else
+            RELEASE_FLAGS="--latest"
+          fi
+
           if gh release view "${TAG}" >/dev/null 2>&1; then
             gh release upload "${TAG}" "${APK}" --clobber
-            gh release edit "${TAG}" --title "${TITLE}" --notes "${NOTES}" --latest
+            gh release edit "${TAG}" --title "${TITLE}" --notes "${NOTES}" ${RELEASE_FLAGS}
           else
             gh release create "${TAG}" "${APK}" \
               --target "${{ github.sha }}" \
               --title "${TITLE}" \
               --notes "${NOTES}" \
-              --latest
+              ${RELEASE_FLAGS}
           fi
