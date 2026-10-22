@@ -12,15 +12,29 @@
 A personal-use Android audio tag editor and file manager that mirrors the workflow of [MP3Tag](https://www.mp3tag.de) for
 Windows, built with Kotlin, Jetpack Compose, and **Material 3 Expressive**.
 
-- Current release: **v0.4.1** (`versionCode = 9`)
+- Latest stable release: **v0.4.1** · Beta: **v0.5.1-beta** (`versionCode = 12`, branch `beta`)
+- All releases and downloads: **https://github.com/areyouanand/mp3tag-mobile/releases**
 - Minimum Android version: **12 (API 31)**
 - Uses the **All files access** permission (`MANAGE_EXTERNAL_STORAGE`) so it can browse any folder
   and rewrite files in place — sideload only, not for Play Store distribution.
 
-## Current status — v0.4.1
+## Releases
+
+| Channel | Version | Link |
+|---|---|---|
+| Stable (Latest) | v0.4.1 | [Latest release](https://github.com/areyouanand/mp3tag-mobile/releases/latest) |
+| Beta (prerelease) | v0.5.1-beta | [v0.5.1-beta](https://github.com/areyouanand/mp3tag-mobile/releases/tag/v0.5.1-beta) |
+| All releases | | [releases](https://github.com/areyouanand/mp3tag-mobile/releases) |
+
+Install the APK from a release's **Assets** on your Android device. Beta builds may still have bugs.
+
+## Current status — v0.5.1 (beta)
 
 | Feature | State |
 |---|---|
+| **Spectrum analysis (Home → Spectrum analysis): spectrogram, top-of-sound cutoff, upsampling & lossy-origin hints, bit-depth padding check** | 🧪 Beta v0.5.1 (device testing pending) |
+| **Folder summary and tap/long-press hint in the browser** | ✅ v0.4.2 |
+| **Safer DFF/APE tag writes (temp copy, replaced only on success)** | ✅ v0.4.2 |
 | **Extended audio formats (Phase 3): Opus (`.opus`), DFF / DSDIFF (`.dff`), Monkey's Audio (`.ape`), WavPack (`.wv`), WMA/ASF (`.wma`/`.asf`), AIFF (`.aif`/`.aiff`/`.aifc`), M4B (`.m4b`)** | ✅ v0.4.0 |
 | **Theme section: Screen mode (`Auto`, `Dark`, `Light`) + Design language (`Material 3 Expressive`, `Material You`, `Liquid Glass`, `Halo`)** | ✅ v0.3.2 |
 | **Home workspace in Grid style (`Tag editor`, `File manager`, `Automate`, `Settings`)** | ✅ v0.3.1 |
@@ -74,6 +88,7 @@ Pushing to `master` runs a GitHub Action that builds the versioned APK (`mp3tag-
 and publishes/updates the corresponding versioned GitHub Release (`v<versionName>`, marked as **Latest**):
 
 - Latest release page: `https://github.com/areyouanand/mp3tag-mobile/releases/latest`
+- Beta builds: pushes to the `beta` branch publish a prerelease `v<versionName>-beta` that is never marked Latest, for example [v0.5.1-beta](https://github.com/areyouanand/mp3tag-mobile/releases/tag/v0.5.1-beta).
 - Current release (`v0.4.1`): `https://github.com/areyouanand/mp3tag-mobile/releases/tag/v0.4.1`
 
 All builds — local and CI — sign with the committed shared debug keystore, so CI-built APKs install
@@ -82,7 +97,7 @@ over previously installed versions without uninstalling.
 ## Using the App
 
 1. **Grant All-files access**: On first launch, grant **All files access** in the system screen opened by the app.
-2. **Home Grid**: Choose from the four grid cards:
+2. **Home Grid**: Choose from the five grid cards:
    - **Tag editor**: Browse folders across Internal storage, SD card, and USB OTG. Tap audio files or folder checkboxes to multi-select (and tap **Edit**), or long-press any file or folder to edit its tags immediately.
    - **File manager**: Full storage file manager with breadcrumb path bar, search, Copy, Move (Cut), Paste, Rename, Delete, New Folder, Sort (Name, Date, Size, Type; Ascending/Descending), Show/Hide `.dot` hidden files, Properties/Details, and one-tap **Edit tags** when audio files are selected.
    - **Automate**: Workspace section reserved for upcoming automated tagging and file workflows.
@@ -96,6 +111,7 @@ app/src/main/java/com/mp3tag/mobile/
 ├── data/
 │   ├── fs/FolderScanner.kt          # directory listing, recursive folder audio scan, natural sort
 │   ├── prefs/AppPrefs.kt            # ID3 version, theme, performance mode, recents, saved patterns
+│   ├── spectrum/                    # FFT, MediaCodec PCM decoder, analysis rules, bit-depth check
 │   └── tag/
 │       ├── TagData.kt               # models, O(1) hashed CoverImage, editable field catalog
 │       ├── TagEngine.kt             # unified read/write dispatcher across all audio formats
@@ -103,7 +119,8 @@ app/src/main/java/com/mp3tag/mobile/
 │       ├── OpusTagHandler.kt        # Ogg Opus (.opus) OpusHead/OpusTags VorbisComment + page CRC writer
 │       └── ApeTagHandler.kt         # APEv2 (APETAGEX) reader/writer for Monkey's Audio (.ape) & WavPack (.wv)
 ├── ui/
-│   ├── home/HomeScreen.kt           # Grid Home dashboard (Tag editor, File manager, Automate, Settings)
+│   ├── home/HomeScreen.kt           # Grid Home dashboard (Tag editor, File manager, Spectrum, Automate, Settings)
+│   ├── spectrum/SpectrumScreen.kt   # Spectrum analysis: file picker, spectrogram, curve, hints
 │   ├── browser/                     # Tag editor folder & file browser, file/folder multi-select
 │   ├── editor/                      # Tag editor (single & batch, 1-pane & 2-pane, ToolsDialogs)
 │   ├── filemanager/                 # Full File Manager (copy, move, paste, rename, delete, sort, info)
