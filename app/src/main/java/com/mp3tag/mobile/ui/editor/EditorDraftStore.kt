@@ -106,6 +106,12 @@ class EditorDraftStore(context: Context) {
         keyFile(paths).delete()
     }
 
+    fun draftCount(): Int = dir.listFiles { f -> f.isFile && f.name.endsWith(".draft") }?.size ?: 0
+
+    fun clearAll() {
+        dir.listFiles { f -> f.isFile && f.name.endsWith(".draft") }?.forEach { it.delete() }
+    }
+
     private fun b64(s: String): String = Base64.getEncoder().encodeToString(s.toByteArray(Charsets.UTF_8))
     private fun b64Bytes(b: ByteArray): String = Base64.getEncoder().encodeToString(b)
 }

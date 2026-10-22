@@ -4,6 +4,7 @@
     <!-- Personal-use app: broad file access so we can browse and rewrite audio files
          anywhere in shared storage, like MP3Tag on Windows. Sideloading only. -->
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <application
         android:allowBackup="true"

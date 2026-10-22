@@ -42,6 +42,20 @@ enum class PerformanceMode(val label: String) {
     LOW_SPEC("Low-spec / memory saver (low RAM & slow SD safe)"),
 }
 
+enum class UpdateChannel(
+    val label: String,
+    val description: String,
+) {
+    RELEASE(
+        label = "Release (Stable)",
+        description = "Official stable builds verified on device",
+    ),
+    BETA(
+        label = "Beta (Prerelease)",
+        description = "Pre-release builds with the newest features & fixes",
+    ),
+}
+
 /**
  * Simple SharedPreferences-backed settings store.
  */
@@ -69,6 +83,19 @@ class AppPrefs(context: Context) {
         get() = PerformanceMode.entries.firstOrNull { it.name == prefs.getString(KEY_PERFORMANCE_MODE, null) }
             ?: PerformanceMode.AUTO
         set(value) = prefs.edit().putString(KEY_PERFORMANCE_MODE, value.name).apply()
+
+    var updateChannel: UpdateChannel
+        get() = UpdateChannel.entries.firstOrNull { it.name == prefs.getString(KEY_UPDATE_CHANNEL, null) }
+            ?: UpdateChannel.BETA
+        set(value) = prefs.edit().putString(KEY_UPDATE_CHANNEL, value.name).apply()
+
+    var skipExistingReplayGain: Boolean
+        get() = prefs.getBoolean(KEY_SKIP_EXISTING_RG, false)
+        set(value) = prefs.edit().putBoolean(KEY_SKIP_EXISTING_RG, value).apply()
+
+    var writeOpusR128ByDefault: Boolean
+        get() = prefs.getBoolean(KEY_WRITE_OPUS_R128, true)
+        set(value) = prefs.edit().putBoolean(KEY_WRITE_OPUS_R128, value).apply()
 
     /** Most-recently-visited folders, newest first. */
     var recentFolders: List<String>
@@ -105,11 +132,22 @@ class AppPrefs(context: Context) {
             .putString(KEY_SAVED_PATTERNS, value.take(MAX_SAVED_PATTERNS).joinToString(RECENT_SEPARATOR))
             .apply()
 
+    fun clearRecentFolders() {
+        prefs.edit().remove(KEY_RECENTS).apply()
+    }
+
+    fun clearSavedPatterns() {
+        prefs.edit().remove(KEY_SAVED_PATTERNS).apply()
+    }
+
     companion object {
         private const val KEY_ID3_VERSION = "id3_version"
         private const val KEY_THEME = "theme_mode"
         private const val KEY_DESIGN_LANGUAGE = "design_language"
         private const val KEY_PERFORMANCE_MODE = "performance_mode"
+        private const val KEY_UPDATE_CHANNEL = "update_channel"
+        private const val KEY_SKIP_EXISTING_RG = "skip_existing_rg"
+        private const val KEY_WRITE_OPUS_R128 = "write_opus_r128"
         private const val KEY_RECENTS = "recent_folders"
         private const val KEY_LAST_FOLDER = "last_folder"
         private const val KEY_LAST_FM_FOLDER = "last_fm_folder"

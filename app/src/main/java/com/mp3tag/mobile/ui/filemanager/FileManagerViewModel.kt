@@ -162,6 +162,18 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
 
     fun refresh() = open(_state.value.directory, remember = false)
 
+    fun reloadPrefs() {
+        val nextHidden = prefs.showHiddenFiles
+        val hiddenChanged = _state.value.showHidden != nextHidden
+        _state.update {
+            it.copy(
+                showHidden = nextHidden,
+                recents = prefs.recentFolders,
+            )
+        }
+        if (hiddenChanged) refresh()
+    }
+
     fun toggleSelect(entry: FileEntry) = _state.update {
         val next = it.selectedPaths.toMutableSet()
         if (!next.add(entry.path)) next.remove(entry.path)

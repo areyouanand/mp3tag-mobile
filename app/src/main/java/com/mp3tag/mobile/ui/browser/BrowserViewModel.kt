@@ -118,6 +118,10 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
 
     fun refresh() = open(_state.value.directory, remember = false)
 
+    fun reloadPrefs() {
+        _state.update { it.copy(recents = prefs.recentFolders) }
+    }
+
     fun toggleSelect(file: File) = _state.update {
         val selection = it.selectedPaths.toMutableSet()
         if (!selection.add(file.absolutePath)) selection.remove(file.absolutePath)

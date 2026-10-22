@@ -286,13 +286,21 @@ fun Mp3tagApp(appViewModel: AppViewModel = viewModel()) {
                     onDesignLanguageChange = appViewModel::setDesignLanguage,
                     performanceMode = performanceMode,
                     onPerformanceModeChange = appViewModel::setPerformanceMode,
-                    onBack = appViewModel::back,
+                    onBack = {
+                        browserVm.reloadPrefs()
+                        fileManagerVm.reloadPrefs()
+                        appViewModel.back()
+                    },
                 )
             }
 
             BackHandler(
                 enabled = screen is Screen.Settings || screen is Screen.Automate || screen is Screen.Spectrum
             ) {
+                if (screen is Screen.Settings) {
+                    browserVm.reloadPrefs()
+                    fileManagerVm.reloadPrefs()
+                }
                 appViewModel.back()
             }
         }
