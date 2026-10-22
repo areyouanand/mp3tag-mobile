@@ -28,7 +28,7 @@ Single user, sideloaded, never going to the Play Store.
 3. **Local tagging only, for now** — MusicBrainz/Discogs lookup is the next Phase 3 step when the user asks for it.
 4. All pickers/menus are **ModalBottomSheets** — NOT DropdownMenu (broken on the device; see gotchas).
 5. Editing follows MP3Tag semantics, implemented as a **per-file cached-edit model** (see below).
-6. **Home Workspace Grid is the app entry point** — launches into 5 grid tiles (`Tag editor`, `File manager`, `Spectrum analysis`, `Automate`, `Settings`). Only the grid tile for `Settings` is shown on the Home page (no duplicate top-bar gear icon).
+6. **Home Cover Flow is the app entry point** — orientation-aware 3D Cover Flow carousel (`ui/home/HomeScreen.kt`): snap fling, overlapping `zIndex` stacks, ~54°/58° inward perspective, glossy album-sleeve gradient + diagonal glass sheen + stage reflection, vertical scroll in portrait and horizontal in landscape, virtual infinite scroll (2000× tiles). Shows all 6 tiles (`Tag editor`, `File manager`, `Spectrum analysis`, `ReplayGain`, `Automate`, `Settings`). No bottom bar/texts (tiles already show title/subtitle).
 7. **Every change goes under a new release number (`versionName` / `versionCode`)** — bump `versionName` and `versionCode` in `app/build.gradle.kts` (and the version string in `SettingsScreen.kt`), tag `v<versionName>`, and let the GitHub Release + APK filename (`mp3tag-mobile-v<versionName>-debug.apk`) reflect that version.
 8. **The repo is PUBLIC and must stay clearly marked as an unofficial fan build** — the
    GitHub description, the topics (incl. `unofficial`), and the `[!IMPORTANT]` disclaimer block
@@ -89,13 +89,9 @@ Single user, sideloaded, never going to the Play Store.
      - **Liquid Glass** (translucent frosted-glass azure/cyan palette, luminous borders, fluid 38dp capsule shapes)
      - **Halo** (deep OLED-friendly contrast, glowing neon cyan/violet aura accents, crisp cut/angular geometry & monospace labels)
 
-**Home Workspace Grid** (`ui/home/HomeScreen.kt`):
-- Launches into a Material 3 Expressive grid dashboard (`2` columns on phones, `3` columns on wide tablets/landscape `>= 900dp`) with cards for:
-  1. **Tag editor**: opens the existing MP3Tag folder browser and batch/single tag editor workflow.
-  2. **File manager**: opens the full-storage file manager (`ui/filemanager/`).
-  3. **Spectrum analysis**: opens `SpectrumScreen` (`ui/spectrum/`) to pick a file and view its spectrogram, cutoff, and hints.
-  4. **Automate**: opens the `AutomateScreen` (`ui/automate/`) placeholder for upcoming automated workflows.
-  5. **Settings**: opens app settings and returns to whichever workspace launched it (the duplicate top-bar settings icon on the Home screen was removed per user request).
+**Home iPod / iTunes Cover Flow** (`ui/home/HomeScreen.kt`):
+- Orientation-aware 3D Cover Flow carousel with snap fling (`rememberSnapFlingBehavior`), overlapping `zIndex` stacks so the center cover always sits on top, ~54° inward tilt (`rotationX`) in portrait and ~58° (`rotationY`) in landscape, glossy album-sleeve gradient + diagonal glass sheen + dark stage backdrop + floor reflection, and virtual infinite scroll (2000× tiles). Tapping a side cover glides it to center; tapping the centered cover opens it.
+- 6 tiles: **Tag editor**, **File manager**, **Spectrum analysis**, **ReplayGain**, **Automate** (placeholder), **Settings**. No bottom bar or duplicate top-bar gear icon — tiles already show title/subtitle.
 
 **File Manager** (`ui/filemanager/FileManagerScreen.kt`, `FileManagerViewModel.kt`):
 - Full storage file & folder browser across Internal storage, SD card, and USB OTG with interactive breadcrumb path bar, search filter, and adaptive 1-pane / 2-pane layouts.

@@ -199,8 +199,15 @@ private fun ReplayGainEditorView(
 
     var writeTrackGain by rememberSaveable { mutableStateOf(true) }
     var writeAlbumGain by rememberSaveable { mutableStateOf(true) }
-    var writeOpusR128Gain by rememberSaveable(hasOpusFiles) { mutableStateOf(hasOpusFiles) }
+    var writeOpusR128Gain by rememberSaveable { mutableStateOf(hasOpusFiles) }
     var skipExistingRg by rememberSaveable { mutableStateOf(false) }
+
+    // Opus R128 gain is only meaningful for .opus files. Force it off when no
+    // .opus files are in the active selection, but remember the user's choice
+    // when .opus files are present (across recompositions and process death).
+    LaunchedEffect(hasOpusFiles) {
+        if (!hasOpusFiles) writeOpusR128Gain = false
+    }
 
     var saving by remember { mutableStateOf(false) }
     var saveProgressText by remember { mutableStateOf<String?>(null) }

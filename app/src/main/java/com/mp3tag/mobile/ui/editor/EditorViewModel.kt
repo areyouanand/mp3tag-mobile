@@ -253,26 +253,26 @@ class EditorViewModel(
     fun applyParsedTags(entries: List<Pair<String, Map<FieldKey, String>>>) {
         pushUndo()
         _state.update { current ->
-        var overrides = current.perFileOverrides
-        for ((path, values) in entries) {
-            values.forEach { (key, value) ->
-                overrides = overrides + (key to ((overrides[key] ?: emptyMap()) + (path to value)))
+            var overrides = current.perFileOverrides
+            for ((path, values) in entries) {
+                values.forEach { (key, value) ->
+                    overrides = overrides + (key to ((overrides[key] ?: emptyMap()) + (path to value)))
+                }
             }
+            current.buildFrom(current.snapshots, current.extraKeys, overrides)
         }
-        current.buildFrom(current.snapshots, current.extraKeys, overrides)
-    }
     }
 
     /** Applies a batch transform (regex/case) result per file. */
     fun applyTransforms(transforms: List<Triple<String, FieldKey, String>>) {
         pushUndo()
         _state.update { current ->
-        var overrides = current.perFileOverrides
-        for ((path, key, value) in transforms) {
-            overrides = overrides + (key to ((overrides[key] ?: emptyMap()) + (path to value)))
+            var overrides = current.perFileOverrides
+            for ((path, key, value) in transforms) {
+                overrides = overrides + (key to ((overrides[key] ?: emptyMap()) + (path to value)))
+            }
+            current.buildFrom(current.snapshots, current.extraKeys, overrides)
         }
-        current.buildFrom(current.snapshots, current.extraKeys, overrides)
-    }
     }
 
     /** Renames the selected files according to a tag-based pattern. */
@@ -338,30 +338,30 @@ class EditorViewModel(
     fun onFieldChange(key: FieldKey, value: String) {
         pushUndo()
         _state.update { current ->
-        val included = current.includedSnapshots
-        if (included.isEmpty()) return@update current
-        // Cache the edit per file: only the files included NOW receive this change,
-        // and it stays cached until Save or Discard.
-        var overrides = current.perFileOverrides
-        included.forEach { snap ->
-            overrides = overrides + (key to ((overrides[key] ?: emptyMap()) + (snap.path to value)))
+            val included = current.includedSnapshots
+            if (included.isEmpty()) return@update current
+            // Cache the edit per file: only the files included NOW receive this change,
+            // and it stays cached until Save or Discard.
+            var overrides = current.perFileOverrides
+            included.forEach { snap ->
+                overrides = overrides + (key to ((overrides[key] ?: emptyMap()) + (snap.path to value)))
+            }
+            current.buildFrom(current.snapshots, current.extraKeys, overrides)
         }
-        current.buildFrom(current.snapshots, current.extraKeys, overrides)
-    }
     }
 
     /** Explicit "clear this field" for the currently included files. */
     fun onFieldClear(key: FieldKey) {
         pushUndo()
         _state.update { current ->
-        val included = current.includedSnapshots
-        if (included.isEmpty()) return@update current
-        var overrides = current.perFileOverrides
-        included.forEach { snap ->
-            overrides = overrides + (key to ((overrides[key] ?: emptyMap()) + (snap.path to "")))
+            val included = current.includedSnapshots
+            if (included.isEmpty()) return@update current
+            var overrides = current.perFileOverrides
+            included.forEach { snap ->
+                overrides = overrides + (key to ((overrides[key] ?: emptyMap()) + (snap.path to "")))
+            }
+            current.buildFrom(current.snapshots, current.extraKeys, overrides)
         }
-        current.buildFrom(current.snapshots, current.extraKeys, overrides)
-    }
     }
 
     /** Throws away all cached (unsaved) changes. */

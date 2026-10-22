@@ -28,7 +28,7 @@ Windows, built with Kotlin, Jetpack Compose, and **Material 3 Expressive**.
 
 Install the APK from a release's **Assets** on your Android device. Beta builds may still have bugs.
 
-## Current status — v0.5.1 (beta)
+## Current status — v0.6.1 (beta)
 
 | Feature | State |
 |---|---|
@@ -37,7 +37,8 @@ Install the APK from a release's **Assets** on your Android device. Beta builds 
 | **Safer DFF/APE tag writes (temp copy, replaced only on success)** | ✅ v0.4.2 |
 | **Extended audio formats (Phase 3): Opus (`.opus`), DFF / DSDIFF (`.dff`), Monkey's Audio (`.ape`), WavPack (`.wv`), WMA/ASF (`.wma`/`.asf`), AIFF (`.aif`/`.aiff`/`.aifc`), M4B (`.m4b`)** | ✅ v0.4.0 |
 | **Theme section: Screen mode (`Auto`, `Dark`, `Light`) + Design language (`Material 3 Expressive`, `Material You`, `Liquid Glass`, `Halo`)** | ✅ v0.3.2 |
-| **Home workspace in Grid style (`Tag editor`, `File manager`, `Automate`, `Settings`)** | ✅ v0.3.1 |
+| **Home iPod / iTunes Cover Flow (`Tag editor`, `File manager`, `Spectrum analysis`, `ReplayGain`, `Automate`, `Settings`)** | ✅ v0.6.1 |
+| **ReplayGain loudness tagging**: browser selection, scan progress banner, Track gain / Album gain / Opus R128 dropdown, existing RG detection, skip existing, remove RG tags | ✅ v0.6.1 |
 | **Full File Manager (copy, move/cut, paste, rename, delete, new folder, sort, hidden files, properties, open in Tag Editor)** | ✅ v0.3.0 |
 | **Automate workspace section (placeholder ready for automation rules)** | ✅ v0.3.0 |
 | **Select / edit entire folders in Tag Editor (folder checkbox, long-press folder, or menu action)** | ✅ v0.3.1 |
@@ -97,9 +98,11 @@ over previously installed versions without uninstalling.
 ## Using the App
 
 1. **Grant All-files access**: On first launch, grant **All files access** in the system screen opened by the app.
-2. **Home Grid**: Choose from the five grid cards:
+2. **Home Cover Flow**: Choose from the six Cover Flow tiles (tap a side cover to glide it to center; tap the centered cover to open it):
    - **Tag editor**: Browse folders across Internal storage, SD card, and USB OTG. Tap audio files or folder checkboxes to multi-select (and tap **Edit**), or long-press any file or folder to edit its tags immediately.
    - **File manager**: Full storage file manager with breadcrumb path bar, search, Copy, Move (Cut), Paste, Rename, Delete, New Folder, Sort (Name, Date, Size, Type; Ascending/Descending), Show/Hide `.dot` hidden files, Properties/Details, and one-tap **Edit tags** when audio files are selected.
+   - **Spectrum analysis**: Spectrogram and cutoff check to spot upsampled or lossy transcodes.
+   - **ReplayGain**: Analyze track & album loudness and write ReplayGain / Opus R128 tags.
    - **Automate**: Workspace section reserved for upcoming automated tagging and file workflows.
    - **Settings**: Configure Theme (**Screen mode**: `Auto`, `Dark`, `Light`; **Design language**: `Material 3 Expressive`, `Material You`, `Liquid Glass`, `Halo`), MP3/DSF ID3v2 version (`v2.3` vs `v2.4`), and Device & performance mode (`Auto`, `High performance`, `Low-spec / memory saver`).
 
@@ -119,7 +122,7 @@ app/src/main/java/com/mp3tag/mobile/
 │       ├── OpusTagHandler.kt        # Ogg Opus (.opus) OpusHead/OpusTags VorbisComment + page CRC writer
 │       └── ApeTagHandler.kt         # APEv2 (APETAGEX) reader/writer for Monkey's Audio (.ape) & WavPack (.wv)
 ├── ui/
-│   ├── home/HomeScreen.kt           # Grid Home dashboard (Tag editor, File manager, Spectrum, Automate, Settings)
+│   ├── home/HomeScreen.kt           # Cover Flow Home dashboard (Tag editor, File manager, Spectrum, ReplayGain, Automate, Settings)
 │   ├── spectrum/SpectrumScreen.kt   # Spectrum analysis: file picker, spectrogram, curve, hints
 │   ├── browser/                     # Tag editor folder & file browser, file/folder multi-select
 │   ├── editor/                      # Tag editor (single & batch, 1-pane & 2-pane, ToolsDialogs)
