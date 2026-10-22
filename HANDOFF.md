@@ -19,7 +19,7 @@ Single user, sideloaded, never going to the Play Store.
   - **WMA / ASF** (`.wma`/`.asf`)
   - **APE** (Monkey's Audio `.ape`) & **WavPack** (`.wv`) via APEv2 (`APETAGEX`)
   - **DSF** (DSD) & **DFF** (DSDIFF `.dff`, embedded `"ID3 "` chunk in `"FRM8"`, ID3v2.3 / ID3v2.4 selectable)
-- versionName 0.5.3 / versionCode 14 (v0.1.0 phase 1, v0.2.1 phase 2, v0.2.2 adaptive UI + hardware scaling, v0.3.0 Home grid + File Manager + Automate, v0.3.1 folder selection + versioned APK/releases, v0.3.2 Theme Screen mode & Design language selector, v0.3.3 roadmap cleanup, v0.4.0 Phase 3 extended audio formats, v0.4.1 audio format conversion added to roadmap, v0.4.2 browser folder summary + in-place tag write fix for DFF/APE, v0.5.0 spectrum analysis, v0.5.1 bit-depth check, v0.5.2 unsaved-edit persistence + undo/redo + per-file edit + kept-values report, v0.5.3 free-form custom fields (TXXX/Vorbis/APE) + ReplayGain)
+- versionName 0.5.8 / versionCode 19 (v0.1.0 phase 1, v0.2.1 phase 2, v0.2.2 adaptive UI + hardware scaling, v0.3.0 Home grid + File Manager + Automate, v0.3.1 folder selection + versioned APK/releases, v0.3.2 Theme Screen mode & Design language selector, v0.3.3 roadmap cleanup, v0.4.0 Phase 3 extended audio formats, v0.4.1 audio format conversion added to roadmap, v0.4.2 browser folder summary + in-place tag write fix for DFF/APE, v0.5.0 spectrum analysis, v0.5.1 bit-depth check, v0.5.2 unsaved-edit persistence + undo/redo + per-file edit + kept-values report, v0.5.3–0.5.8 free-form custom fields + ReplayGain + Cover Flow Home)
 
 ## Locked-in product decisions (do not silently change)
 
@@ -44,7 +44,16 @@ Single user, sideloaded, never going to the Play Store.
    forks must not imply endorsement by, or affiliation with, the original Mp3tag (mp3tag.de)
    or its author.
 
-## Current state (v0.5.2 beta — v0.4.1 and older verified on the device; v0.4.2 and v0.5.x NOT yet device-tested)
+## Current state (v0.5.8 beta — v0.4.1 and older verified on the device; v0.5.4–0.5.8 installed on DX270)
+
+**Recent additions (v0.5.2–0.5.8)**:
+- **Unsaved edit cache persistence** (`EditorDraftStore`): SHA-256-keyed draft in cache dir survives process death / app kill; cleared on discard or when no edits remain after save.
+- **Undo / redo** in `EditorViewModel` (50-deep stack) with TopAppBar buttons.
+- **Per-file editing from batch screen**: files sheet has an "Edit" button per file opening a single-file editor session.
+- **Kept pending edits report**: save outcomes dialog lists files whose pending edits were retained (excluded files).
+- **Free-form custom fields**: `WriteRequest.customFields` writes ID3 `TXXX` frames (`Id3CustomFields`), VorbisComment arbitrary keys, and APEv2 items.
+- **ReplayGain loudness tagging** (`data/replaygain/LoudnessAnalyzer.kt`, `ui/replaygain/ReplayGainScreen.kt`): in-app folder/file browser with checkboxes, progress bar, per-track and per-album gain selection, writes `REPLAYGAIN_*` tags via custom fields.
+- **Home Cover Flow** (`ui/home/HomeScreen.kt`): orientation-aware 3D Cover Flow carousel (vertical scroll + `rotationX` in portrait; horizontal + `rotationY` in landscape) with virtual infinite scroll (2000× tiles).
 
 **Spectrum analysis** (v0.5.0, bit-depth check v0.5.1; `data/spectrum/`, `ui/spectrum/`, Home tile):
 - `PcmDecoder`: decodes a 60 s window from the middle of a file to mono float with MediaExtractor +
