@@ -193,9 +193,13 @@ private fun ReplayGainEditorView(
     var currentFileName by remember(paths) { mutableStateOf<String?>(null) }
     var scanJob by remember { mutableStateOf<Job?>(null) }
 
+    val hasOpusFiles = remember(paths, excludedPaths) {
+        paths.any { it !in excludedPaths && TagEngine.formatFor(File(it)) == AudioFormat.OPUS }
+    }
+
     var writeTrackGain by rememberSaveable { mutableStateOf(true) }
     var writeAlbumGain by rememberSaveable { mutableStateOf(true) }
-    var writeOpusR128Gain by rememberSaveable { mutableStateOf(true) }
+    var writeOpusR128Gain by rememberSaveable(hasOpusFiles) { mutableStateOf(hasOpusFiles) }
     var skipExistingRg by rememberSaveable { mutableStateOf(false) }
 
     var saving by remember { mutableStateOf(false) }
@@ -205,10 +209,6 @@ private fun ReplayGainEditorView(
     var filesSheetOpen by rememberSaveable { mutableStateOf(false) }
     var gainSheetOpen by rememberSaveable { mutableStateOf(false) }
     var toolsSheetOpen by rememberSaveable { mutableStateOf(false) }
-
-    val hasOpusFiles = remember(paths) {
-        paths.any { TagEngine.formatFor(File(it)) == AudioFormat.OPUS }
-    }
 
     fun recomputeAlbumMetrics(currentTracks: List<TrackLoudness>, currentExcluded: Set<String>) {
         val included = currentTracks.filter { it.path !in currentExcluded }
@@ -745,10 +745,12 @@ private fun ReplayGainEditorView(
                     TextButton(onClick = {
                         writeTrackGain = true
                         writeAlbumGain = true
+                        writeOpusR128Gain = hasOpusFiles
                     }) { Text("Select all") }
                     TextButton(onClick = {
                         writeTrackGain = false
                         writeAlbumGain = false
+                        writeOpusR128Gain = false
                     }) { Text("Deselect all") }
                 }
 
@@ -802,28 +804,63 @@ private fun ReplayGainEditorView(
                     modifier = Modifier.clickable { writeAlbumGain = !writeAlbumGain },
                 )
 
+                val opusChecked = hasOpusFiles && writeOpusR128Gain
                 ListItem(
-                    headlineContent = { Text("Opus R128 gain (.opus files)") },
+                    headlineContent = {
+                        Text(
+                            text = "Opus R128 gain (.opus files)",
+                            color = if (hasOpusFiles) {
+                                MaterialTheme.colorScheme.onSurface
+                            } else {
+                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                            },
+                        )
+                    },
                     supportingContent = {
                         Text(
-                            "Writes RFC 7845 R128_TRACK_GAIN / R128_ALBUM_GAIN (Q7.8 at -23 LUFS reference)",
+                            text = if (hasOpusFiles) {
+                                "Writes RFC 7845 R128_TRACK_GAIN / R128_ALBUM_GAIN (Q7.8 at -23 LUFS reference)"
+                            } else {
+                                "Disabled — only available when .opus files are selected"
+                            },
                             style = MaterialTheme.typography.bodySmall,
+                            color = if (hasOpusFiles) {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
+                            },
                         )
                     },
                     leadingContent = {
-                        Icon(Icons.Filled.GraphicEq, contentDescription = null)
+                        Icon(
+                            Icons.Filled.GraphicEq,
+                            contentDescription = null,
+                            tint = if (hasOpusFiles) {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
+                            },
+                        )
                     },
                     trailingContent = {
-                        Checkbox(checked = writeOpusR128Gain, onCheckedChange = null)
+                        Checkbox(
+                            checked = opusChecked,
+                            onCheckedChange = null,
+                            enabled = hasOpusFiles,
+                        )
                     },
                     colors = ListItemDefaults.colors(
-                        containerColor = if (writeOpusR128Gain) {
+                        containerColor = if (opusChecked) {
                             MaterialTheme.colorScheme.secondaryContainer
                         } else {
                             MaterialTheme.colorScheme.surface
                         },
                     ),
-                    modifier = Modifier.clickable { writeOpusR128Gain = !writeOpusR128Gain },
+                    modifier = if (hasOpusFiles) {
+                        Modifier.clickable { writeOpusR128Gain = !writeOpusR128Gain }
+                    } else {
+                        Modifier
+                    },
                 )
 
                 HorizontalDivider(Modifier.padding(vertical = 8.dp))
