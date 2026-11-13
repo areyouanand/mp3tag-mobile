@@ -305,7 +305,13 @@ mixed-cover detection. Section sits at the bottom of the editor (user requested)
 
 ## Workflow conventions
 
-- Update `HANDOFF.md` + `README.md` status tables at the end of any session; commit + push
+- **DO NOT PUBLISH — standing instruction from the user (Nov 2026):** do not push to `github.com`
+  and do not create/refresh GitHub Releases or tags until the user explicitly asks. A push to
+  `master`/`beta` automatically runs CI, which publishes an APK release, so treat any `git push` as
+  publishing. Work locally (commits are fine), show the diff/summary, and wait for "publish"/"push"
+  before syncing. Builds/tests/installs on the emulator are unaffected.
+- Update `HANDOFF.md` + `README.md` status tables at the end of any session; commit (and push **only**
+  when the user asks).
 - Branches: day-to-day work and beta releases go on `beta`; `master` gets merged from `beta` once a build is verified on the device
   (message per logical change). Every push green-lights CI automatically.
 - Feature work lives in `app/src/main/java/com/mp3tag/mobile/`:
