@@ -238,9 +238,11 @@ mixed-cover detection. Section sits at the bottom of the editor (user requested)
 - Android SDK (platform 36, build-tools, platform-tools): `%LOCALAPPDATA%\mp3tag-tooling\sdk`
 - Portable git: `%LOCALAPPDATA%\mp3tag-tooling\cmd\git.exe` (add its dir to `$env:PATH` for any
   command that shells out to git)
-- GitHub CLI: `%LOCALAPPDATA%\mp3tag-tooling\bin\gh.exe` — needs git in PATH too; logged in as
-  `areyouanand` (token in Windows keyring, scopes incl. repo+workflow; re-auth via
-  `gh auth login`/`gh auth refresh -s workflow` device flow if it ever lapses)
+- GitHub CLI: `%LOCALAPPDATA%\mp3tag-tooling\gh\bin\gh.exe` — installed as a portable zip (the MSI
+  needs an elevation prompt that is easy to miss) and that `bin` dir is on the **user PATH**.
+  Needs git in PATH too; logged in as `areyouanand` (token in Windows keyring, scopes
+  `repo`/`read:org`/`gist`; re-auth via `gh auth login --web` device flow if it ever lapses — ask the
+  user to approve the one-time code, then `gh auth setup-git` so `git push` uses it).
 - `local.properties` holds `sdk.dir` (git-ignored, machine-specific)
 - **MSYS2 (portable, no admin): `%LOCALAPPDATA%\mp3tag-tooling\msys64`** — bash/make/nasm/gcc for
   the FFmpeg cross-build. FFmpeg sources in `%LOCALAPPDATA%\mp3tag-tooling\src`, build trees in
@@ -259,6 +261,13 @@ mixed-cover detection. Section sits at the bottom of the editor (user requested)
   have the user grant it once more.
 - The user often tests on the touchscreen WHILE the agent works — scripted input and user
   input will collide; keep automated UI runs short and re-dump before each tap.
+- **Preferred test target is the emulator, not the DX270**: AVD `Pixel_9_API_37` (x86_64, API 37)
+  in `C:\Android\Sdk`. Start it headless with
+  `emulator -avd Pixel_9_API_37 -gpu host -no-window -no-snapshot -no-audio` (the RTX 5080 is used
+  via WHPX; `-gpu swiftshader_indirect` burns a core). Both connected devices are visible to
+  Gradle, so select the emulator explicitly:
+  `$env:ANDROID_SERIAL='emulator-5554'; ./gradlew connectedDebugAndroidTest "-Pandroid.injected.device.serial=emulator-5554"`.
+  Grant `appops set com.mp3tag.mobile MANAGE_EXTERNAL_STORAGE allow` after each install.
 
 ## CI / installs from anywhere
 
