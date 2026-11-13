@@ -12,7 +12,7 @@
 A personal-use Android audio tag editor and file manager that mirrors the workflow of [MP3Tag](https://www.mp3tag.de) for
 Windows, built with Kotlin, Jetpack Compose, and **Material 3 Expressive**.
 
-- Latest stable release: **v0.8.0** · Local working build: **v0.8.1** (`versionCode = 28`, not yet published)
+- Latest stable release: **v0.8.1** (`versionCode = 28`)
 - All releases and downloads: **https://github.com/areyouanand/mp3tag-mobile/releases**
 - Minimum Android version: **12 (API 31)**
 - Uses the **All files access** permission (`MANAGE_EXTERNAL_STORAGE`) so it can browse any folder
@@ -22,13 +22,13 @@ Windows, built with Kotlin, Jetpack Compose, and **Material 3 Expressive**.
 
 | Channel | Version | Link |
 |---|---|---|
-| Stable (Latest) | v0.8.0 | [Latest release](https://github.com/areyouanand/mp3tag-mobile/releases/latest) |
-| Beta (prerelease) | v0.8.0-beta | [v0.8.0-beta](https://github.com/areyouanand/mp3tag-mobile/releases/tag/v0.8.0-beta) |
+| Stable (Latest) | v0.8.1 | [Latest release](https://github.com/areyouanand/mp3tag-mobile/releases/latest) |
+| Beta (prerelease) | v0.8.1-beta | [v0.8.1-beta](https://github.com/areyouanand/mp3tag-mobile/releases/tag/v0.8.1-beta) |
 | All releases | | [releases](https://github.com/areyouanand/mp3tag-mobile/releases) |
 
 Install the APK that matches your device from a release's **Assets** — `arm64-v8a` for phones and DAPs (almost always this one) and `x86_64` only for Android emulators. Beta builds may still have bugs.
 
-## Current status — v0.8.1 (local build)
+## Current status — v0.8.1
 
 | Feature | State |
 |---|---|

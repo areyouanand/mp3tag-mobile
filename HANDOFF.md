@@ -44,7 +44,7 @@ Single user, sideloaded, never going to the Play Store.
    forks must not imply endorsement by, or affiliation with, the original Mp3tag (mp3tag.de)
    or its author.
 
-## Current state (v0.8.1 — local working build, deliberately **not published** per the standing rule below. v0.8.0 is the published stable release. Verified with 34 JVM tests + 18 instrumentation tests on the Pixel_9_API_37 emulator. The DX270 still runs a v0.7.0 APK from an earlier test run; the new tags/ABI features have not been exercised on its hardware yet)
+## Current state (v0.8.1 — released as the stable build in Nov 2026. Verified with 34 JVM tests + 18 instrumentation tests on the Pixel_9_API_37 emulator. The DX270 still runs a v0.7.0 APK from an earlier test run; the new tags/ABI features have not been exercised on its hardware yet)
 
 **Recent additions (v0.5.2–0.6.3)**:
 - **Unsaved edit cache persistence** (`EditorDraftStore`): SHA-256-keyed draft in cache dir survives process death / app kill; cleared on discard or when no edits remain after save.
@@ -328,7 +328,7 @@ mixed-cover detection. Section sits at the bottom of the editor (user requested)
 
 - **Beta channel**: the `beta` branch is also built by `.github/workflows/build.yml`. Those builds are tagged
   `v<versionName>-beta`, published as **prereleases**, and never marked Latest. `master` stays the stable channel.
-  Current stable: `v0.8.0`; local working build: `v0.8.1` (**not published**).
+  Current stable: `v0.8.1`; current beta: `v0.8.1-beta`.
 
 ## Workflow conventions
 
