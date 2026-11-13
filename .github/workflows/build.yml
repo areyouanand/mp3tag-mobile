@@ -34,11 +34,15 @@ jobs:
             TAG_NAME="${TAG_NAME}-beta"
           fi
           APK_NAME="mp3tag-mobile-${TAG_NAME}-debug.apk"
+          APK_ARM64="mp3tag-mobile-${TAG_NAME}-arm64-v8a-debug.apk"
+          APK_X86_64="mp3tag-mobile-${TAG_NAME}-x86_64-debug.apk"
           echo "version_name=${VERSION_NAME}" >> "$GITHUB_OUTPUT"
           echo "version_code=${VERSION_CODE}" >> "$GITHUB_OUTPUT"
           echo "tag=${TAG_NAME}" >> "$GITHUB_OUTPUT"
           echo "apk_name=${APK_NAME}" >> "$GITHUB_OUTPUT"
-          echo "build_apk=mp3tag-mobile-v${VERSION_NAME}-debug.apk" >> "$GITHUB_OUTPUT"
+          echo "apk_arm64=${APK_ARM64}" >> "$GITHUB_OUTPUT"
+          echo "apk_x86_64=${APK_X86_64}" >> "$GITHUB_OUTPUT"
+          echo "build_base=mp3tag-mobile-v${VERSION_NAME}" >> "$GITHUB_OUTPUT"
           echo "is_beta=${IS_BETA}" >> "$GITHUB_OUTPUT"
 
       - name: Make gradlew executable
@@ -47,28 +51,35 @@ jobs:
       - name: Build debug APK
         run: ./gradlew assembleDebug --no-daemon
 
-      - name: Prepare versioned APK
-        run: cp "app/build/outputs/apk/debug/${{ steps.version.outputs.build_apk }}" "${{ steps.version.outputs.apk_name }}"
+      - name: Prepare versioned APKs
+        run: |
+          cp "app/build/outputs/apk/debug/${{ steps.version.outputs.build_base }}-arm64-v8a-debug.apk" "${{ steps.version.outputs.apk_arm64 }}"
+          cp "app/build/outputs/apk/debug/${{ steps.version.outputs.build_base }}-x86_64-debug.apk" "${{ steps.version.outputs.apk_x86_64 }}"
+          ls -lh "${{ steps.version.outputs.apk_arm64 }}" "${{ steps.version.outputs.apk_x86_64 }}"
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
           name: mp3tag-mobile-${{ steps.version.outputs.tag }}-debug
-          path: ${{ steps.version.outputs.apk_name }}
+          path: |
+            ${{ steps.version.outputs.apk_arm64 }}
+            ${{ steps.version.outputs.apk_x86_64 }}
 
       - name: Publish versioned GitHub Release (${{ steps.version.outputs.tag }})
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ steps.version.outputs.tag }}"
-          APK="${{ steps.version.outputs.apk_name }}"
+          APK_ARM64="${{ steps.version.outputs.apk_arm64 }}"
+          APK_X86_64="${{ steps.version.outputs.apk_x86_64 }}"
           TITLE="MP3Tag Mobile ${TAG} (build ${{ steps.version.outputs.version_code }})"
           NOTES="Release **${TAG}** (versionCode ${{ steps.version.outputs.version_code }}).
 
-          - **APK**: \`${APK}\`
+          - **arm64-v8a APK**: \`${APK_ARM64}\` — for phones and DAPs (install this one)
+          - **x86_64 APK**: \`${APK_X86_64}\` — for Android emulators
           - **Commit**: ${{ github.sha }}
 
-          Download \`${APK}\` and open it on your Android device to install or update."
+          Download the APK that matches your device (almost certainly arm64-v8a) and open it to install or update."
 
           if [ "${{ steps.version.outputs.is_beta }}" = "true" ]; then
             RELEASE_FLAGS="--prerelease"
@@ -77,10 +88,10 @@ jobs:
           fi
 
           if gh release view "${TAG}" >/dev/null 2>&1; then
-            gh release upload "${TAG}" "${APK}" --clobber
+            gh release upload "${TAG}" "${APK_ARM64}" "${APK_X86_64}" --clobber
             gh release edit "${TAG}" --title "${TITLE}" --notes "${NOTES}" ${RELEASE_FLAGS}
           else
-            gh release create "${TAG}" "${APK}" \
+            gh release create "${TAG}" "${APK_ARM64}" "${APK_X86_64}" \
               --target "${{ github.sha }}" \
               --title "${TITLE}" \
               --notes "${NOTES}" \

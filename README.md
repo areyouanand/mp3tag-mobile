@@ -12,7 +12,7 @@
 A personal-use Android audio tag editor and file manager that mirrors the workflow of [MP3Tag](https://www.mp3tag.de) for
 Windows, built with Kotlin, Jetpack Compose, and **Material 3 Expressive**.
 
-- Latest stable release: **v0.7.0** · Beta: **v0.7.0-beta** (`versionCode = 25`)
+- Latest stable release: **v0.7.0** · Beta: **v0.7.1-beta** (`versionCode = 26`)
 - All releases and downloads: **https://github.com/areyouanand/mp3tag-mobile/releases**
 - Minimum Android version: **12 (API 31)**
 - Uses the **All files access** permission (`MANAGE_EXTERNAL_STORAGE`) so it can browse any folder
@@ -23,16 +23,18 @@ Windows, built with Kotlin, Jetpack Compose, and **Material 3 Expressive**.
 | Channel | Version | Link |
 |---|---|---|
 | Stable (Latest) | v0.7.0 | [Latest release](https://github.com/areyouanand/mp3tag-mobile/releases/latest) |
-| Beta (prerelease) | v0.7.0-beta | [v0.7.0-beta](https://github.com/areyouanand/mp3tag-mobile/releases/tag/v0.7.0-beta) |
+| Beta (prerelease) | v0.7.1-beta | [v0.7.1-beta](https://github.com/areyouanand/mp3tag-mobile/releases/tag/v0.7.1-beta) |
 | All releases | | [releases](https://github.com/areyouanand/mp3tag-mobile/releases) |
 
-Install the APK from a release's **Assets** on your Android device. Beta builds may still have bugs.
+Install the APK that matches your device from a release's **Assets** — `arm64-v8a` for phones and DAPs (almost always this one) and `x86_64` only for Android emulators. Beta builds may still have bugs.
 
-## Current status — v0.7.0
+## Current status — v0.7.1 (beta)
 
 | Feature | State |
 |---|---|
-| **Audio format conversion (Home → Convert): MP3 (LAME), FLAC, M4A/AAC, M4A/ALAC, Opus, Ogg Vorbis, WAV, AIFF, WMA, WavPack — per-file progress, cancel, tag + cover copy, optional delete-original** | ✅ v0.7.0 |
+| **Per-ABI APKs (`arm64-v8a` for devices, `x86_64` for emulators) — smaller downloads** | ✅ v0.7.1 |
+| **1:1 metadata on conversion**: custom fields (ID3 `TXXX`, VorbisComment, APEv2) and cover art now survive MP3/FLAC/M4A/ALAC/Opus/Ogg/WAV/AIFF/WMA conversions | ✅ v0.7.1 |
+| **Audio format conversion (Home → Convert): MP3 (LAME), FLAC, M4A/AAC, M4A/ALAC, Opus, Ogg Vorbis, WAV, AIFF, WMA, WavPack — per-file progress, cancel, optional delete-original** | ✅ v0.7.0 |
 | **Settings: in-app GitHub update checker (`Release` vs `Beta` channel), ReplayGain defaults, File Manager/cache controls, Developer (`@areyouanand` Vision) & GitHub links** | ✅ v0.6.3 |
 | **Spectrum analysis (Home → Spectrum analysis): in-app File Manager picker, spectrogram, top-of-sound cutoff, upsampling & lossy-origin hints, bit-depth padding check — now decodes DSD (DSF/DFF), APE and WavPack through the bundled FFmpeg** | ✅ v0.7.0 |
 | **Folder summary and tap/long-press hint in the browser** | ✅ v0.4.2 |
@@ -62,7 +64,7 @@ Install the APK from a release's **Assets** on your Android device. Beta builds 
 | WAV: RIFF INFO + ID3 chunks (MP3Tag-style both) | ✅ |
 | DSD: DSF & DFF (DSDIFF) files tagged through their embedded ID3v2 tag | ✅ v0.4.0 |
 | FLAC, M4A/MP4/M4B, Ogg Vorbis, Opus, AIFF, WMA/ASF, APE (Monkey's Audio), WavPack (`.wv`) | ✅ v0.4.0 |
-| Audio format conversion (transcoding while preserving tags & cover art) | ✅ v0.7.0 |
+| Audio format conversion (transcoding while preserving tags & cover art) | ✅ v0.7.0 · 1:1 metadata v0.7.1 |
 | MusicBrainz / Discogs metadata & cover lookup | Phase 3 remaining |
 
 ## Building

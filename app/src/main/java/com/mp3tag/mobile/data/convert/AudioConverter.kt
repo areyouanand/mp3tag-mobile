@@ -1,8 +1,10 @@
 package com.mp3tag.mobile.data.convert
 
 import com.mp3tag.mobile.data.prefs.Id3Version
+import com.mp3tag.mobile.data.tag.AudioFormat
 import com.mp3tag.mobile.data.tag.CoverAction
 import com.mp3tag.mobile.data.tag.EDITABLE_FIELDS
+import com.mp3tag.mobile.data.tag.FlacPictureHandler
 import com.mp3tag.mobile.data.tag.TagEngine
 import com.mp3tag.mobile.data.tag.WriteOptions
 import com.mp3tag.mobile.data.tag.WriteRequest
@@ -176,6 +178,7 @@ object AudioConverter {
         val snapshot = runCatching { TagEngine.read(source) }.getOrElse { error ->
             return "Tags not copied: ${error.message ?: "unreadable source tag"}"
         }
+        val format = TagEngine.formatFor(destination)
         var warning: String? = null
 
         if (snapshot.fields.isNotEmpty()) {
@@ -207,16 +210,43 @@ object AudioConverter {
                     failure,
                 )
             }
-            if (!copied) warning = "Tags not copied: ${lastError ?: "unknown error"}"
+            if (!copied) warning = append(warning, "Tags not copied: ${lastError ?: "unknown error"}")
+        }
+
+        // Free-form fields (TXXX / VorbisComment / APEv2): ReplayGain, MusicBrainz extras,
+        // custom user fields. Kept separate from the FieldKey pass so a failure is isolated.
+        val custom = runCatching { TagEngine.readAllCustomFields(source) }.getOrDefault(emptyMap())
+        if (custom.isNotEmpty()) {
+            if (format == AudioFormat.M4A || format == AudioFormat.WMA) {
+                warning = append(
+                    warning,
+                    "Custom fields not copied: ${format.name} free-form atoms are not supported yet",
+                )
+            } else {
+                val attempt = runCatching {
+                    TagEngine.write(destination, WriteRequest(customFields = custom), WriteOptions(id3Version))
+                }
+                if (attempt.isFailure) {
+                    val failure = attempt.exceptionOrNull()
+                    android.util.Log.w("AudioConverter", "Custom field copy failed for ${destination.name}", failure)
+                    val why = failure?.message ?: failure?.javaClass?.simpleName ?: "unknown error"
+                    warning = append(warning, "Custom fields not copied: $why")
+                }
+            }
         }
 
         snapshot.cover?.let { cover ->
             val attempt = runCatching {
-                TagEngine.write(
-                    destination,
-                    WriteRequest(coverAction = CoverAction.REPLACE, newCover = cover),
-                    WriteOptions(id3Version),
-                )
+                when (format) {
+                    // JAudioTagger's AndroidArtwork throws on write; FLAC PICTURE blocks
+                    // are written directly at the container level instead.
+                    AudioFormat.FLAC -> FlacPictureHandler.write(destination, cover)
+                    else -> TagEngine.write(
+                        destination,
+                        WriteRequest(coverAction = CoverAction.REPLACE, newCover = cover),
+                        WriteOptions(id3Version),
+                    )
+                }
             }
             if (attempt.isFailure) {
                 val failure = attempt.exceptionOrNull()
@@ -225,9 +255,15 @@ object AudioConverter {
                     else -> failure?.message ?: failure?.javaClass?.simpleName ?: "unsupported"
                 }
                 android.util.Log.w("AudioConverter", "Cover copy failed for ${destination.name}", failure)
-                warning = listOfNotNull(warning, "Cover art not copied: $why").joinToString(" · ")
+                warning = append(warning, "Cover art not copied: $why")
+            } else if (runCatching { TagEngine.read(destination).cover }.getOrNull() == null) {
+                // Write reported success but the format did not store it (WavPack today).
+                warning = append(warning, "Cover art not copied: ${format.name} did not store it")
             }
         }
         return warning
     }
+
+    private fun append(existing: String?, message: String): String =
+        if (existing.isNullOrBlank()) message else "$existing · $message"
 }

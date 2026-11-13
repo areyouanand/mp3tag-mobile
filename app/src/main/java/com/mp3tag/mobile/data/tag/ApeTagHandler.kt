@@ -155,6 +155,20 @@ internal object ApeTagHandler {
         }
     }.getOrDefault(emptyMap())
 
+    fun readAllCustomFields(file: File): Map<String, String> = runCatching {        RandomAccessFile(file, "r").use { raf ->
+            val parsed = locateAndParseApeTag(raf, raf.length()) ?: return emptyMap()
+            val out = LinkedHashMap<String, String>()
+            for (item in parsed.items) {
+                if (item.isBinary) continue
+                val key = item.key.uppercase()
+                if (key.startsWith("COVER ART")) continue
+                val text = item.valueBytes.toString(Charsets.UTF_8).replace('\u0000', ';').trim()
+                if (text.isNotEmpty()) out[key] = text
+            }
+            out
+        }
+    }.getOrDefault(emptyMap())
+
     fun read(file: File, format: AudioFormat): TagSnapshot {
         RandomAccessFile(file, "r").use { raf ->
             val fileLen = raf.length()

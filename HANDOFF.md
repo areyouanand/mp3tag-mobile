@@ -19,7 +19,7 @@ Single user, sideloaded, never going to the Play Store.
   - **WMA / ASF** (`.wma`/`.asf`)
   - **APE** (Monkey's Audio `.ape`) & **WavPack** (`.wv`) via APEv2 (`APETAGEX`)
   - **DSF** (DSD) & **DFF** (DSDIFF `.dff`, embedded `"ID3 "` chunk in `"FRM8"`, ID3v2.3 / ID3v2.4 selectable)
-- versionName 0.7.0 / versionCode 25 (v0.1.0 phase 1, v0.2.1 phase 2, v0.2.2 adaptive UI + hardware scaling, v0.3.0 Home grid + File Manager + Automate, v0.3.1 folder selection + versioned APK/releases, v0.3.2 Theme Screen mode & Design language selector, v0.3.3 roadmap cleanup, v0.4.0 Phase 3 extended audio formats, v0.4.1 audio format conversion added to roadmap, v0.4.2 browser folder summary + in-place tag write fix for DFF/APE, v0.5.0 spectrum analysis, v0.5.1 bit-depth check, v0.5.2 unsaved-edit persistence + undo/redo + per-file edit + kept-values report, v0.5.3–0.6.3 free-form custom fields + ReplayGain matching Tag Editor UX + existing RG detection/skip/remove + Opus R128 + iPod/iTunes Cover Flow Home + in-app File Manager for Spectrum analysis + expanded Settings with Update checker, Release/Beta channel selector, Developer `@areyouanand` Vision credit & GitHub links, **v0.7.0 FFmpeg-based audio format conversion**)
+- versionName 0.7.1 / versionCode 26 (v0.1.0 phase 1, v0.2.1 phase 2, v0.2.2 adaptive UI + hardware scaling, v0.3.0 Home grid + File Manager + Automate, v0.3.1 folder selection + versioned APK/releases, v0.3.2 Theme Screen mode & Design language selector, v0.3.3 roadmap cleanup, v0.4.0 Phase 3 extended audio formats, v0.4.1 audio format conversion added to roadmap, v0.4.2 browser folder summary + in-place tag write fix for DFF/APE, v0.5.0 spectrum analysis, v0.5.1 bit-depth check, v0.5.2 unsaved-edit persistence + undo/redo + per-file edit + kept-values report, v0.5.3–0.6.3 free-form custom fields + ReplayGain matching Tag Editor UX + existing RG detection/skip/remove + Opus R128 + iPod/iTunes Cover Flow Home + in-app File Manager for Spectrum analysis + expanded Settings with Update checker, Release/Beta channel selector, Developer `@areyouanand` Vision credit & GitHub links, **v0.7.0 FFmpeg-based audio format conversion**, **v0.7.1 1:1 metadata copying (custom fields + cover art for FLAC/Ogg/Opus) and per-ABI APKs**)
 
 ## Locked-in product decisions (do not silently change)
 
@@ -44,7 +44,7 @@ Single user, sideloaded, never going to the Play Store.
    forks must not imply endorsement by, or affiliation with, the original Mp3tag (mp3tag.de)
    or its author.
 
-## Current state (v0.7.0 — released to `master`/stable in Nov 2026; verified with 12 JVM + 14 instrumentation tests on the Pixel_9_API_37 emulator. The DX270 has a v0.7.0 APK installed from an earlier test run but the feature has not been exercised on its hardware yet)
+## Current state (v0.7.1 — v0.7.0 is the current stable release; v0.7.1 is on `beta`. Verified with 12 JVM + 16 instrumentation tests on the Pixel_9_API_37 emulator. The DX270 still runs a v0.7.0 APK from an earlier test run; the new metadata/ABI work has not been exercised on its hardware yet)
 
 **Recent additions (v0.5.2–0.6.3)**:
 - **Unsaved edit cache persistence** (`EditorDraftStore`): SHA-256-keyed draft in cache dir survives process death / app kill; cleared on discard or when no edits remain after save.
@@ -57,7 +57,7 @@ Single user, sideloaded, never going to the Play Store.
 - **Spectrum analysis uses in-app File Manager** (`ui/spectrum/SpectrumScreen.kt`, `ui/filemanager/FileManagerScreen.kt`): replaced the system SAF document picker with the in-app `FileManagerScreen` (one-tap audio file analysis, plus "Analyze in Spectrum analysis" from the main File Manager).
 - **Expanded Settings & Update Checker** (`ui/settings/SettingsScreen.kt`, `data/update/UpdateChecker.kt`): ReplayGain defaults (Opus R128 default & skip already-tagged default), File Manager `.dot` hidden-files toggle, history/cache clear buttons (recent folders, saved patterns, unsaved editor drafts), **Updates** section with `Release (Stable)` vs `Beta (Prerelease)` channel selector + live GitHub Releases update checker & APK download, **Developer** section (`@areyouanand` — Vision), and **About** section with clickable GitHub repository & releases links.
 
-**Audio format conversion** (v0.7.0; `data/convert/`, `ui/convert/`, `native/`, Home tile "Convert"):
+**Audio format conversion** (v0.7.0, 1:1 metadata v0.7.1; `data/convert/`, `ui/convert/`, `native/`, Home tile "Convert"):
 - Home → **Convert** reuses `BrowserScreen` for selection, then shows a setup screen: target
   format, bitrate (lossy), sample rate, channels, 16/24-bit PCM depth (WAV/AIFF), keep-tags
   toggle, delete-original toggle, a running progress card with cancel, and a results sheet.- Targets: MP3 (libmp3lame), FLAC, M4A/AAC, M4A/ALAC, Opus (libopus, forced 48 kHz), Ogg Vorbis
@@ -70,15 +70,23 @@ Single user, sideloaded, never going to the Play Store.
 - Conversion is sequential (one decode+encode at a time), reports 0–100 % per file through a JNI
   callback every 200 ms, and `nativeCancel()` aborts between packets. Output never overwrites:
   collisions become `name (converted).ext` / `name (converted 2).ext`.
-- Tags are copied after the audio write through `TagEngine` (all fields → core fields →
-  title/artist/album fallback) including embedded cover art. Free-form custom fields and
-  ReplayGain tags are NOT copied yet. New files are written next to the originals.
-- Tag/cover copying revealed and fixed a latent JAudioTagger bug: `MP3File.setID3v2Tag()` does not
-  update `AudioFile.tag`, so the first write after an ID3v2.3↔v2.4 conversion silently dropped every
-  field. `TagEngine.ensureTag()` now also calls `af.setTag(newTag)` after `setID3v2Tag(newTag)`.
-- Cover art is written in a second pass so a format that cannot embed artwork still gets its tags.
-  FLAC is such a format on Android: JAudioTagger's `AndroidArtwork.setImageFromData()` throws
-  `UnsupportedOperationException`, so the conversion reports "Cover art not copied" for FLAC.
+- **Metadata is copied 1:1** (v0.7.1): `TagEngine.readAllCustomFields()` enumerates every ID3 `TXXX`
+  frame, VorbisComment key and APEv2 item, and the converter replays them on the target after the
+  standard field pass. Cover art is copied for **MP3, FLAC, M4A/ALAC, Opus, Ogg Vorbis, WAV, AIFF and
+  WMA**; **WavPack** cover writing is still broken (the APEv2 binary item round-trip needs its own
+  fix) and the converter reports "Cover art not copied" instead of failing silently. MP4 freeform
+  atoms and ASF attributes are not enumerated yet, so custom fields on `.m4a`/`.wma` targets are
+  reported as not copied. Multi-value tags (e.g. two ARTIST comments) still collapse to one value.
+- Cover art got its own writers because JAudioTagger's `AndroidArtwork.setImageFromData()` throws on
+  Android: `FlacPictureHandler` writes FLAC `PICTURE` blocks directly (via `writeSafely`, with a
+  PNG/JPEG dimension parser), and Ogg/Opus get a base64 `METADATA_BLOCK_PICTURE` comment.
+- Tag/cover copying revealed and fixed three latent JAudioTagger bugs:
+  `MP3File.setID3v2Tag()` left `AudioFile.tag` stale (first write after an ID3 version conversion
+  dropped every field — fixed with `af.setTag(newTag)`); `Id3CustomFields` read `frameBody` by
+  reflection on the wrong class (always null, so TXXX never worked — now uses the public
+  `getBody()`); and `FlacTag` wraps its comments in `VorbisCommentTag`, so custom fields were
+  skipped for FLAC (now unwrapped via `vorbisTagOf()`). WAV/AIFF also need an explicit ID3 sub-tag
+  (`wavTag.setID3Tag(...)`) before TXXX can be written.
 - FFmpeg 8 dropped its DSDIFF demuxer, so `ffmpeg_jni.c` parses `FRM8` / `PROP` (`FS`, `CHNL`)
   itself and feeds the interleaved MSB-first `DSD ` payload to the `dsd_msbf` decoder; `.dsf`
   uses FFmpeg's own demuxer. DST-compressed `.dff` files are refused with a message.
@@ -221,9 +229,15 @@ mixed-cover detection. Section sits at the bottom of the editor (user requested)
 - **`MP3File.setID3v2Tag()` only updates its private `id3v2tag` field**; `AudioFile.tag` keeps pointing
   at the old tag, so fields set on `af.tag` right after an ID3 version conversion are silently dropped
   on commit. `TagEngine.ensureTag()` therefore calls `af.setTag(newTag)` as well. Do not remove it.
-- **FLAC cover art cannot be written through JAudioTagger on Android**:
-  `AndroidArtwork.setImageFromData()` is unimplemented and throws. Tags still write; the converter
-  surfaces "Cover art not copied" for FLAC (a custom FLAC PICTURE-block writer would fix it).
+- **JAudioTagger custom-field quirks (all fixed in v0.7.1, keep the workarounds)**:
+  `AbstractID3v2Frame.frameBody` lives on `AbstractTagFrame` — read it through the public
+  `getBody()` (the old reflection always returned null, so ID3 `TXXX` never worked);
+  `FlacTag` is *not* a `VorbisCommentTag` (unwrap with `getVorbisCommentTag()`);
+  WAV/AIFF only store `TXXX` after `WavTag.setID3Tag(...)` / `AiffTag.setID3Tag(...)`.
+- **FLAC/Ogg/Opus cover art cannot go through JAudioTagger on Android**
+  (`AndroidArtwork.setImageFromData()` throws). FLAC uses `FlacPictureHandler` (direct `PICTURE`
+  block), Ogg/Opus use a base64 `METADATA_BLOCK_PICTURE` comment. WavPack (`APEv2` `Cover Art
+  (front)`) writes the item but the read-back still returns nothing — open follow-up.
 - **`AudioFileIO.read` on a file whose format's reader can throw KeyNotFoundException for
   unsupported FieldKeys** — every `getFirst()` must be wrapped in runCatching. Unsupported keys
   set in `setField` fail per-file and surface in the save-results dialog (acceptable).
@@ -271,18 +285,23 @@ mixed-cover detection. Section sits at the bottom of the editor (user requested)
 
 ## CI / installs from anywhere
 
-- **Versioning rule**: every logical change must bump `versionName` and `versionCode` in `app/build.gradle.kts` (and `SettingsScreen.kt`).
-- `base.archivesName.set("mp3tag-mobile-v$versionName")` in `app/build.gradle.kts` names the built APK **`mp3tag-mobile-v<versionName>-debug.apk`** (e.g. `app/build/outputs/apk/debug/mp3tag-mobile-v0.3.1-debug.apk`).
-- `.github/workflows/build.yml`: on every push to `master` (or `v*` tag / manual dispatch), extracts `versionName` & `versionCode` from `app/build.gradle.kts`, builds `mp3tag-mobile-v<versionName>-debug.apk`, uploads it as a workflow artifact, and creates/updates the versioned GitHub Release **`v<versionName>`** (`--latest`) with `mp3tag-mobile-v<versionName>-debug.apk` attached:
-  `https://github.com/areyouanand/mp3tag-mobile/releases/latest`
+- **Versioning rule**: every logical change must bump `versionName` and `versionCode` in `app/build.gradle.kts` (and `UpdateChecker.CURRENT_VERSION_NAME`).
+- **Per-ABI APKs** (v0.7.1+): `splits { abi { include("arm64-v8a", "x86_64"); isUniversalApk = false } }` produces
+  `app/build/outputs/apk/debug/mp3tag-mobile-v<versionName>-arm64-v8a-debug.apk` (phones/DAPs, install this)
+  and `...-x86_64-debug.apk` (emulator). There is no universal APK.
+- `.github/workflows/build.yml`: on every push to `master` (or `v*` tag / manual dispatch), extracts
+  `versionName` & `versionCode` from `app/build.gradle.kts`, builds both split APKs, uploads them as one
+  workflow artifact, and creates/updates the versioned GitHub Release **`v<versionName>`** (`--latest`) with
+  both APKs attached: `https://github.com/areyouanand/mp3tag-mobile/releases/latest`
 - **`app/debug.keystore` is committed** — shared DEBUG signing config for local AND CI builds,
   so all APKs install over each other without uninstalling. Do not git-ignore or delete it;
   it's a debug key only, not a production secret.
-- To re-verify phone updateability over USB (no uninstall needed anymore): `adb install -r app\build\outputs\apk\debug\mp3tag-mobile-v<versionName>-debug.apk`.
+- To re-verify phone updateability over USB (no uninstall needed anymore):
+  `adb install -r app\build\outputs\apk\debug\mp3tag-mobile-v<versionName>-arm64-v8a-debug.apk`.
 
 - **Beta channel**: the `beta` branch is also built by `.github/workflows/build.yml`. Those builds are tagged
   `v<versionName>-beta`, published as **prereleases**, and never marked Latest. `master` stays the stable channel.
-  Current stable: `v0.7.0`; current beta: `v0.7.0-beta`.
+  Current stable: `v0.7.0`; current beta: `v0.7.1-beta`.
 
 ## Workflow conventions
 

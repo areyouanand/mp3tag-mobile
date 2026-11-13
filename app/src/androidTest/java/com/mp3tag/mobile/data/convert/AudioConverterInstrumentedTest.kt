@@ -68,6 +68,37 @@ class AudioConverterInstrumentedTest {
         assertEquals("warning=${result.warning}", "Test Tone", snapshot.fields[org.jaudiotagger.tag.FieldKey.TITLE])
         assertEquals("warning=${result.warning}", "Unit Test", snapshot.fields[org.jaudiotagger.tag.FieldKey.ARTIST])
         assertEquals("warning=${result.warning}", "Conversion Suite", snapshot.fields[org.jaudiotagger.tag.FieldKey.ALBUM])
+        // FLAC artwork goes through FlacPictureHandler instead of JAudioTagger.
+        assertTrue("FLAC cover art was not copied (warning=${result.warning})", snapshot.cover != null)
+    }
+
+    @Test
+    fun customFieldsSurviveConversion() {
+        val source = taggedWav("custom.wav")
+        com.mp3tag.mobile.data.tag.TagEngine.write(
+            source,
+            com.mp3tag.mobile.data.tag.WriteRequest(
+                customFields = mapOf(
+                    "REPLAYGAIN_TRACK_GAIN" to "-7.25 dB",
+                    "MY_CUSTOM_FIELD" to "hello",
+                ),
+            ),
+            com.mp3tag.mobile.data.tag.WriteOptions(Id3Version.V2_3),
+        )
+        val sourceCustom = com.mp3tag.mobile.data.tag.TagEngine.readAllCustomFields(source)
+        assertEquals("-7.25 dB", sourceCustom["REPLAYGAIN_TRACK_GAIN"])
+
+        for (target in listOf(ConvertTarget.MP3, ConvertTarget.FLAC, ConvertTarget.OPUS)) {
+            val result = runConversion(source, target)
+            assertTrue("$target failed: ${result.error}", result.outputPath != null)
+            val custom = com.mp3tag.mobile.data.tag.TagEngine.readAllCustomFields(File(result.outputPath!!))
+            assertEquals(
+                "$target (warning=${result.warning})",
+                "-7.25 dB",
+                custom["REPLAYGAIN_TRACK_GAIN"],
+            )
+            assertEquals("$target (warning=${result.warning})", "hello", custom["MY_CUSTOM_FIELD"])
+        }
     }
 
     @Test
@@ -108,6 +139,40 @@ class AudioConverterInstrumentedTest {
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
         android.util.Base64.DEFAULT,
     )
+
+    @Test
+    fun coversSurviveConversion() {
+        val source = taggedWav("cover-matrix.wav")
+        val supported = listOf(
+            ConvertTarget.MP3,
+            ConvertTarget.FLAC,
+            ConvertTarget.M4A,
+            ConvertTarget.ALAC,
+            ConvertTarget.OPUS,
+            ConvertTarget.OGG,
+            ConvertTarget.WAV,
+            ConvertTarget.AIFF,
+            ConvertTarget.WMA,
+        )
+        for (target in supported) {
+            val result = runConversion(source, target)
+            assertTrue("$target conversion failed: ${result.error}", result.outputPath != null)
+            val snapshot = com.mp3tag.mobile.data.tag.TagEngine.read(File(result.outputPath!!))
+            assertTrue(
+                "$target lost the cover (warning=${result.warning})",
+                snapshot.cover != null,
+            )
+        }
+
+        // WavPack's APEv2 cover round-trip is still broken; it must not fail silently.
+        val wv = runConversion(source, ConvertTarget.WAVPACK)
+        if (wv.outputPath != null) {
+            assertTrue(
+                "WavPack silently dropped the cover (warning=${wv.warning})",
+                wv.warning?.contains("Cover art not copied") == true,
+            )
+        }
+    }
 
     private fun convert(
         name: String,

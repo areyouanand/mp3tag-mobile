@@ -2,7 +2,6 @@ package com.mp3tag.mobile.data.tag
 
 import org.jaudiotagger.audio.ogg.util.OggCRCFactory
 import org.jaudiotagger.tag.FieldKey
-import org.jaudiotagger.tag.images.ArtworkFactory
 import org.jaudiotagger.tag.vorbiscomment.VorbisCommentCreator
 import org.jaudiotagger.tag.vorbiscomment.VorbisCommentReader
 import org.jaudiotagger.tag.vorbiscomment.VorbisCommentTag
@@ -46,12 +45,45 @@ internal object OpusTagHandler {
     }
 
     fun readCustomFields(file: File, keys: Set<String>): Map<String, String> = runCatching {
+        val vorbisTag = readVorbisComment(file) ?: return emptyMap()
+        val out = LinkedHashMap<String, String>()
+        for (key in keys) {
+            val v = runCatching { vorbisTag.getFirst(key) }.getOrNull()?.trim()
+                ?: runCatching { vorbisTag.getFirst(key.uppercase()) }.getOrNull()?.trim()
+                ?: runCatching { vorbisTag.getFirst(key.lowercase()) }.getOrNull()?.trim()
+            if (!v.isNullOrEmpty()) {
+                out[key.uppercase()] = v
+            }
+        }
+        out
+    }.getOrDefault(emptyMap())
+
+    /** Every OpusTags comment (except the binary picture entry), keyed by upper-case name. */
+    fun readAllCustomFields(file: File): Map<String, String> = runCatching {
+        val vorbisTag = readVorbisComment(file) ?: return emptyMap()
+        allCommentFields(vorbisTag)
+    }.getOrDefault(emptyMap())
+
+    private fun allCommentFields(tag: VorbisCommentTag): Map<String, String> {
+        val out = LinkedHashMap<String, String>()
+        for (field in tag.fields) {
+            val key = runCatching { field.id }.getOrNull()?.trim() ?: continue
+            if (key.isEmpty()) continue
+            val upper = key.uppercase()
+            if (upper == "METADATA_BLOCK_PICTURE" || upper.startsWith("COVERART")) continue
+            val value = runCatching { tag.getFirst(key) }.getOrNull()?.trim() ?: continue
+            if (value.isNotEmpty()) out[upper] = value
+        }
+        return out
+    }
+
+    private fun readVorbisComment(file: File): VorbisCommentTag? {
         RandomAccessFile(file, "r").use { raf ->
             val fileLen = raf.length()
-            if (fileLen < 28L) return emptyMap()
-            val firstPage = readNextPage(raf) ?: return emptyMap()
+            if (fileLen < 28L) return null
+            val firstPage = readNextPage(raf) ?: return null
             if (firstPage.body.size < 19 || !firstPage.body.copyOfRange(0, 8).contentEquals(OPUS_HEAD_MAGIC)) {
-                return emptyMap()
+                return null
             }
             val tagsPacket = ByteArrayOutputStream()
             var tagsComplete = false
@@ -71,27 +103,13 @@ internal object OpusTagHandler {
                 }
             }
             val tagsBytes = tagsPacket.toByteArray()
-            val vorbisTag: VorbisCommentTag = if (
-                tagsBytes.size >= 16 &&
-                tagsBytes.copyOfRange(0, 8).contentEquals(OPUS_TAGS_MAGIC)
-            ) {
-                val commentBytes = tagsBytes.copyOfRange(8, tagsBytes.size)
-                runCatching { VorbisCommentReader().read(commentBytes, false, null) }.getOrNull() ?: return emptyMap()
-            } else {
-                return emptyMap()
+            if (tagsBytes.size < 16 || !tagsBytes.copyOfRange(0, 8).contentEquals(OPUS_TAGS_MAGIC)) {
+                return null
             }
-            val out = LinkedHashMap<String, String>()
-            for (key in keys) {
-                val v = runCatching { vorbisTag.getFirst(key) }.getOrNull()?.trim()
-                    ?: runCatching { vorbisTag.getFirst(key.uppercase()) }.getOrNull()?.trim()
-                    ?: runCatching { vorbisTag.getFirst(key.lowercase()) }.getOrNull()?.trim()
-                if (!v.isNullOrEmpty()) {
-                    out[key.uppercase()] = v
-                }
-            }
-            out
+            val commentBytes = tagsBytes.copyOfRange(8, tagsBytes.size)
+            return runCatching { VorbisCommentReader().read(commentBytes, false, null) }.getOrNull()
         }
-    }.getOrDefault(emptyMap())
+    }
 
     fun read(file: File): TagSnapshot {
         RandomAccessFile(file, "r").use { raf ->
@@ -170,7 +188,7 @@ internal object OpusTagHandler {
                         )
                     }
                 }
-            }.getOrNull()
+            }.getOrNull() ?: vorbisTag?.let { FlacPictureHandler.readVorbisPicture(it) }
 
             return TagSnapshot(
                 path = file.absolutePath,
@@ -258,13 +276,19 @@ internal object OpusTagHandler {
 
         when (request.coverAction) {
             CoverAction.NONE -> Unit
-            CoverAction.REMOVE -> runCatching { existingVorbisTag.deleteArtworkField() }
-            CoverAction.REPLACE -> request.newCover?.let { cover ->
+            CoverAction.REMOVE -> {
                 runCatching { existingVorbisTag.deleteArtworkField() }
-                val artwork = ArtworkFactory.getNew()
-                artwork.binaryData = cover.bytes
-                artwork.mimeType = cover.mimeType
-                existingVorbisTag.setField(artwork)
+                runCatching { existingVorbisTag.deleteField("METADATA_BLOCK_PICTURE") }
+            }
+            CoverAction.REPLACE -> request.newCover?.let { cover ->
+                // ArtworkFactory/AndroidArtwork cannot encode on Android; store the
+                // standard base64 METADATA_BLOCK_PICTURE comment instead.
+                runCatching { existingVorbisTag.deleteArtworkField() }
+                val encoded = android.util.Base64.encodeToString(
+                    FlacPictureHandler.buildPictureBlock(cover),
+                    android.util.Base64.NO_WRAP,
+                )
+                existingVorbisTag.setField("METADATA_BLOCK_PICTURE", encoded)
             }
         }
 

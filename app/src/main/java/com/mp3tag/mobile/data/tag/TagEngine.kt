@@ -69,6 +69,79 @@ object TagEngine {
         }
     }
 
+    /**
+     * Every free-form/custom field in [file] (ID3 `TXXX`, VorbisComment keys, APEv2 items),
+     * keyed by upper-case name and excluding binary artwork entries. The converter uses this
+     * to copy metadata 1:1 instead of only the known [FieldKey]s.
+     */
+    fun readAllCustomFields(file: File): Map<String, String> = runCatching {
+        when (formatFor(file)) {
+            AudioFormat.DFF -> DffTagHandler.readAllCustomFields(file)
+            AudioFormat.OPUS -> OpusTagHandler.readAllCustomFields(file)
+            AudioFormat.APE, AudioFormat.WAVPACK -> ApeTagHandler.readAllCustomFields(file)
+            AudioFormat.MP3, AudioFormat.WAV, AudioFormat.AIFF, AudioFormat.DSF -> {
+                val af = readAudioFile(file)
+                id3TagOf(af.tag)?.let { Id3CustomFields.readAll(it) } ?: emptyMap()
+            }
+            AudioFormat.FLAC, AudioFormat.OGG -> {
+                vorbisTagOf(readAudioFile(file).tag)?.let { vorbisCustomFields(it) } ?: emptyMap()
+            }
+            // MP4 freeform atoms and ASF attributes are not enumerated yet.
+            else -> emptyMap()
+        }
+    }.getOrDefault(emptyMap())
+
+    private fun readAudioFile(file: File): AudioFile =
+        if (file.extension.lowercase() == "asf") AudioFileIO.readAs(file, "wma")
+        else AudioFileIO.read(file)
+
+    private fun id3TagOf(tag: org.jaudiotagger.tag.Tag?): AbstractID3v2Tag? = when (tag) {
+        is AbstractID3v2Tag -> tag
+        is WavTag -> tag.iD3Tag
+        is AiffTag -> tag.iD3Tag
+        else -> null
+    }
+
+    /** FLAC wraps its Vorbis comments in a FlacTag; Ogg/Opus expose them directly. */
+    private fun vorbisTagOf(
+        tag: org.jaudiotagger.tag.Tag?,
+    ): org.jaudiotagger.tag.vorbiscomment.VorbisCommentTag? = when (tag) {
+        is org.jaudiotagger.tag.vorbiscomment.VorbisCommentTag -> tag
+        is org.jaudiotagger.tag.flac.FlacTag -> tag.vorbisCommentTag
+        else -> null
+    }
+
+    private fun vorbisCustomFields(
+        tag: org.jaudiotagger.tag.vorbiscomment.VorbisCommentTag,
+    ): Map<String, String> {
+        val out = LinkedHashMap<String, String>()
+        for (field in tag.fields) {
+            val key = runCatching { field.id }.getOrNull()?.trim() ?: continue
+            if (key.isEmpty()) continue
+            val upper = key.uppercase()
+            if (upper == "METADATA_BLOCK_PICTURE" || upper.startsWith("COVERART")) continue
+            // FieldKey-mapped comments are written by the normal field pass; copying them
+            // again would let raw values (e.g. TRACKNUMBER "3/12") override split fields.
+            if (upper in STANDARD_VORBIS_KEYS) continue
+            val value = runCatching { tag.getFirst(key) }.getOrNull()?.trim() ?: continue
+            if (value.isNotEmpty()) out[upper] = value
+        }
+        return out
+    }
+
+    private val STANDARD_VORBIS_KEYS = setOf(
+        "VENDOR", "TITLE", "VERSION", "SUBTITLE", "ALBUM", "ALBUMARTIST", "ALBUM ARTIST",
+        "ARTIST", "ARTISTS", "TRACKNUMBER", "TRACKTOTAL", "TOTALTRACKS", "DISCNUMBER",
+        "DISCTOTAL", "TOTALDISCS", "COMPOSER", "DATE", "YEAR", "ORIGINALDATE", "GENRE",
+        "COMMENT", "DESCRIPTION", "LYRICS", "LYRICIST", "CONDUCTOR", "REMIXER", "PRODUCER",
+        "ENGINEER", "MIXER", "DJMIXER", "ARRANGER", "PERFORMER", "COPYRIGHT", "ENCODEDBY",
+        "ENCODER", "ENCODING", "GROUPING", "LANGUAGE", "MOOD", "MEDIA", "LABEL",
+        "ORGANIZATION", "CATALOGNUMBER", "BARCODE", "COMPILATION", "ISRC", "BPM", "KEY",
+        "SCRIPT", "RELEASETYPE", "RELEASESTATUS", "RELEASECOUNTRY", "INVOLVEDPEOPLE",
+        "ORCHESTRA", "CHOIR", "ENSEMBLE", "INSTRUMENT", "WORK", "MOVEMENT",
+        "MOVEMENTNAME", "MOVEMENTNUMBER", "MOVEMENTTOTAL", "OCCASION", "QUALITY", "RATING",
+    )
+
     /** Reads requested custom fields (e.g. `REPLAYGAIN_*`, `R128_*`), keyed by uppercase name. */
     fun readCustomFields(file: File, keys: Set<String>): Map<String, String> = runCatching {
         when (val format = formatFor(file)) {
@@ -143,7 +216,10 @@ object TagEngine {
                     )
                 }
             }
-        }.getOrNull()
+        }.getOrNull() ?: when (format) {
+            AudioFormat.FLAC -> FlacPictureHandler.read(file)
+            else -> vorbisTagOf(tag)?.let { FlacPictureHandler.readVorbisPicture(it) }
+        }
 
         return TagSnapshot(
             path = file.absolutePath,
@@ -183,20 +259,20 @@ object TagEngine {
 
         // Free-form custom fields (TXXX for ID3, arbitrary keys for VorbisComment).
         if (request.customFields.isNotEmpty()) {
-            val id3Tag: AbstractID3v2Tag? = when (tag) {
-                is AbstractID3v2Tag -> tag
-                is WavTag -> tag.iD3Tag
-                is AiffTag -> tag.iD3Tag
-                else -> null
-            }
-            val isVorbis = tag is org.jaudiotagger.tag.vorbiscomment.VorbisCommentTag
+            val id3Tag = id3TagOf(tag)
+            val vorbisTag = vorbisTagOf(tag)
             request.customFields.forEach { (key, value) ->
                 if (id3Tag != null) {
                     Id3CustomFields.write(id3Tag, key, value)
-                } else if (isVorbis) {
-                    val vt = tag as org.jaudiotagger.tag.vorbiscomment.VorbisCommentTag
-                    if (value.isNullOrBlank()) runCatching { vt.deleteField(key) }
-                    else runCatching { vt.setField(key, value) }
+                } else if (vorbisTag != null) {
+                    val attempt = if (value.isNullOrBlank()) {
+                        runCatching { vorbisTag.deleteField(key) }
+                    } else {
+                        runCatching { vorbisTag.setField(key, value) }
+                    }
+                    if (attempt.isFailure) {
+                        android.util.Log.w("TagEngine", "Vorbis custom field '$key' failed", attempt.exceptionOrNull())
+                    }
                 }
                 // MP4 / ASF custom fields are not handled here yet.
             }
@@ -204,13 +280,28 @@ object TagEngine {
 
         when (request.coverAction) {
             CoverAction.NONE -> Unit
-            CoverAction.REMOVE -> runCatching { tag.deleteArtworkField() }
-            CoverAction.REPLACE -> request.newCover?.let { cover ->
+            CoverAction.REMOVE -> {
                 runCatching { tag.deleteArtworkField() }
-                val artwork = ArtworkFactory.getNew()
-                artwork.binaryData = cover.bytes
-                artwork.mimeType = cover.mimeType
-                tag.setField(artwork)
+                vorbisTagOf(tag)?.let { runCatching { it.deleteField("METADATA_BLOCK_PICTURE") } }
+            }
+            CoverAction.REPLACE -> request.newCover?.let { cover ->
+                val vorbis = vorbisTagOf(tag)
+                if (vorbis != null) {
+                    // Vorbis-family tags use a base64 PICTURE block; JAudioTagger's
+                    // Artwork path throws on Android (AndroidArtwork).
+                    runCatching { vorbis.deleteArtworkField() }
+                    val encoded = android.util.Base64.encodeToString(
+                        FlacPictureHandler.buildPictureBlock(cover),
+                        android.util.Base64.NO_WRAP,
+                    )
+                    vorbis.setField("METADATA_BLOCK_PICTURE", encoded)
+                } else {
+                    runCatching { tag.deleteArtworkField() }
+                    val artwork = ArtworkFactory.getNew()
+                    artwork.binaryData = cover.bytes
+                    artwork.mimeType = cover.mimeType
+                    tag.setField(artwork)
+                }
             }
         }
 
@@ -244,8 +335,23 @@ object TagEngine {
                 }
             }
 
-            format == AudioFormat.DSF -> {
-                val current = af.tag as? AbstractID3v2Tag
+            // WAV/AIFF need an explicit ID3 sub-tag before TXXX custom fields (and
+            // ID3-specific fields) can be written; otherwise the write is a silent no-op.
+            format == AudioFormat.WAV -> {
+                val wavTag = af.tag as? WavTag
+                if (wavTag != null && wavTag.iD3Tag == null) {
+                    wavTag.setID3Tag(if (want == ID3V2Version.ID3_V24) ID3v24Tag() else ID3v23Tag())
+                }
+            }
+
+            format == AudioFormat.AIFF -> {
+                val aiffTag = af.tag as? AiffTag
+                if (aiffTag != null && aiffTag.iD3Tag == null) {
+                    aiffTag.setID3Tag(if (want == ID3V2Version.ID3_V24) ID3v24Tag() else ID3v23Tag())
+                }
+            }
+
+            format == AudioFormat.DSF -> {                val current = af.tag as? AbstractID3v2Tag
                 val wantV24 = options.id3Version == Id3Version.V2_4
                 if (current == null) {
                     af.setTag(if (wantV24) ID3v24Tag() else ID3v23Tag())

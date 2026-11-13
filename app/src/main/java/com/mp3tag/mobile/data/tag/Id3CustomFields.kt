@@ -6,15 +6,8 @@ import org.jaudiotagger.tag.id3.AbstractID3v2Tag
 import org.jaudiotagger.tag.id3.framebody.FrameBodyTXXX
 
 object Id3CustomFields {
-    private fun frameBody(frame: AbstractID3v2Frame): FrameBodyTXXX? {
-        return try {
-            val bodyField = AbstractID3v2Frame::class.java.getDeclaredField("frameBody")
-            bodyField.isAccessible = true
-            bodyField.get(frame) as? FrameBodyTXXX
-        } catch (_: Exception) {
-            null
-        }
-    }
+    private fun frameBody(frame: AbstractID3v2Frame): FrameBodyTXXX? =
+        runCatching { frame.body as? FrameBodyTXXX }.getOrNull()
 
     fun setDescription(frame: AbstractID3v2Frame, description: String, text: String) {
         val body = frameBody(frame) ?: return
@@ -47,6 +40,19 @@ object Id3CustomFields {
             val desc = bodyDescription(frame)?.trim() ?: continue
             val text = bodyText(frame)?.trim() ?: continue
             if (desc.uppercase() in upperWanted && text.isNotEmpty()) {
+                out[desc.uppercase()] = text
+            }
+        }
+        return out
+    }
+
+    /** Every TXXX frame in the tag, keyed by upper-cased description. */
+    fun readAll(tag: AbstractID3v2Tag): Map<String, String> {
+        val out = LinkedHashMap<String, String>()
+        for (frame in allTxxxFrames(tag)) {
+            val desc = bodyDescription(frame)?.trim() ?: continue
+            val text = bodyText(frame)?.trim() ?: continue
+            if (desc.isNotEmpty() && text.isNotEmpty()) {
                 out[desc.uppercase()] = text
             }
         }

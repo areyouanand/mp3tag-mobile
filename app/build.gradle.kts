@@ -12,10 +12,21 @@ android {
         applicationId = "com.mp3tag.mobile"
         minSdk = 31          // Android 12
         targetSdk = 36
-        versionCode = 25
-        versionName = "0.7.0"
+        versionCode = 26
+        versionName = "0.7.1"
         base.archivesName.set("mp3tag-mobile-v$versionName")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    // Per-ABI APKs: the FFmpeg .so is large, and a device only ever needs its own ABI.
+    // CI attaches both files to the release (arm64 for phones/DAPs, x86_64 for emulators).
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "x86_64")
+            isUniversalApk = false
+        }
     }
 
     // Shared debug keystore so local and CI builds are inter-installable

@@ -38,12 +38,23 @@ internal object DffTagHandler {
     }
 
     fun readCustomFields(file: File, keys: Set<String>): Map<String, String> = runCatching {
+        val id3Tag = readId3Tag(file) ?: return emptyMap()
+        Id3CustomFields.read(id3Tag, keys)
+    }.getOrDefault(emptyMap())
+
+    /** Every TXXX frame in the embedded ID3 chunk, keyed by upper-cased description. */
+    fun readAllCustomFields(file: File): Map<String, String> = runCatching {
+        val id3Tag = readId3Tag(file) ?: return emptyMap()
+        Id3CustomFields.readAll(id3Tag)
+    }.getOrDefault(emptyMap())
+
+    private fun readId3Tag(file: File): AbstractID3v2Tag? {
         RandomAccessFile(file, "r").use { raf ->
             val fileLen = raf.length()
-            if (fileLen < 16L) return emptyMap()
-            if (readChunkId(raf) != "FRM8") return emptyMap()
+            if (fileLen < 16L) return null
+            if (readChunkId(raf) != "FRM8") return null
             val frm8DataSize = raf.readLong()
-            if (readChunkId(raf) != "DSD ") return emptyMap()
+            if (readChunkId(raf) != "DSD ") return null
             var id3Tag: AbstractID3v2Tag? = null
             val endOfFrm8 = (12L + frm8DataSize).coerceAtMost(fileLen)
             while (raf.filePointer + 12L <= endOfFrm8) {
@@ -54,9 +65,9 @@ internal object DffTagHandler {
                 }
                 raf.seek(chunk.nextChunkPos.coerceAtMost(fileLen))
             }
-            if (id3Tag != null) Id3CustomFields.read(id3Tag, keys) else emptyMap()
+            return id3Tag
         }
-    }.getOrDefault(emptyMap())
+    }
 
     fun read(file: File): TagSnapshot {
         RandomAccessFile(file, "r").use { raf ->
