@@ -12,7 +12,7 @@
 A personal-use Android audio tag editor and file manager that mirrors the workflow of [MP3Tag](https://www.mp3tag.de) for
 Windows, built with Kotlin, Jetpack Compose, and **Material 3 Expressive**.
 
-- Latest stable release: **v0.7.0** · Beta: **v0.7.1-beta** (`versionCode = 26`)
+- Latest stable release: **v0.7.0** · Last beta: **v0.7.1-beta** (`versionCode = 26`) · Local working build: **v0.8.0** (`versionCode = 27`, not yet published)
 - All releases and downloads: **https://github.com/areyouanand/mp3tag-mobile/releases**
 - Minimum Android version: **12 (API 31)**
 - Uses the **All files access** permission (`MANAGE_EXTERNAL_STORAGE`) so it can browse any folder
@@ -28,12 +28,23 @@ Windows, built with Kotlin, Jetpack Compose, and **Material 3 Expressive**.
 
 Install the APK that matches your device from a release's **Assets** — `arm64-v8a` for phones and DAPs (almost always this one) and `x86_64` only for Android emulators. Beta builds may still have bugs.
 
-## Current status — v0.7.1 (beta)
+## Current status — v0.8.0 (local build)
 
 | Feature | State |
 |---|---|
+| **Multi-value tags** (separate ARTIST/ALBUM_ARTIST/GENRE/COMPOSER/PERFORMER values) for MP3/FLAC/Ogg/Opus/DSD; APEv2 targets warn because the format is single-valued | ✅ v0.8.0 |
+| **MP4 free-form atoms + ASF attributes** survive conversion, so custom/ReplayGain fields work on `.m4a` and `.wma` too | ✅ v0.8.0 |
+| **WavPack APEv2 cover art** now reads back correctly — all 10 conversion targets keep cover art | ✅ v0.8.0 |
+| **Crash-safe tag writes** for every format (temp copy + atomic replace) and "undo last save" in the editor | ✅ v0.8.0 |
+| **Editor power tools**: tag clipboard, auto-numbering, consistency check, per-field revert, cover from folder/extract, BPM detection, CSV import/export, subfolder rename patterns | ✅ v0.8.0 |
+| **Tag-aware browser**: search by title/artist/album, persisted tag sorting, duplicate finder | ✅ v0.8.0 |
+| **File Manager**: paste conflict policy, cancellable copy/move with progress, free-space check, move-to-trash, SHA-256 properties | ✅ v0.8.0 |
+| **ReplayGain**: ITU-R BS.1770-4 K-weighting, gated blocks, 4× true peak, clip-safe gain, gated album gain | ✅ v0.8.0 |
+| **Conversion output control**: subfolder + filename pattern (`%artist%/%album%/%title%`), timestamps, compression levels, post-write verification | ✅ v0.8.0 |
+| **Spectrum**: 15/30/60 s window, signal-health diagnostics, result cache, PNG export | ✅ v0.8.0 |
+| **Settings backup/restore (JSON), release notes, in-app open-source licenses** | ✅ v0.8.0 |
 | **Per-ABI APKs (`arm64-v8a` for devices, `x86_64` for emulators) — smaller downloads** | ✅ v0.7.1 |
-| **1:1 metadata on conversion**: custom fields (ID3 `TXXX`, VorbisComment, APEv2) and cover art now survive MP3/FLAC/M4A/ALAC/Opus/Ogg/WAV/AIFF/WMA conversions | ✅ v0.7.1 |
+| **1:1 metadata on conversion** (custom fields and cover art) | ✅ v0.7.1 |
 | **Audio format conversion (Home → Convert): MP3 (LAME), FLAC, M4A/AAC, M4A/ALAC, Opus, Ogg Vorbis, WAV, AIFF, WMA, WavPack — per-file progress, cancel, optional delete-original** | ✅ v0.7.0 |
 | **Settings: in-app GitHub update checker (`Release` vs `Beta` channel), ReplayGain defaults, File Manager/cache controls, Developer (`@areyouanand` Vision) & GitHub links** | ✅ v0.6.3 |
 | **Spectrum analysis (Home → Spectrum analysis): in-app File Manager picker, spectrogram, top-of-sound cutoff, upsampling & lossy-origin hints, bit-depth padding check — now decodes DSD (DSF/DFF), APE and WavPack through the bundled FFmpeg** | ✅ v0.7.0 |

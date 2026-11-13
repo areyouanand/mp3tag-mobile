@@ -7,7 +7,13 @@ import java.io.File
  * If [edit] throws, [target] is left untouched and the temporary copy is deleted.
  */
 internal fun writeSafely(target: File, edit: (File) -> Unit) {
-    val temp = File(target.parentFile, ".${target.name}.${System.nanoTime()}.tmp")
+    // Keep the original extension: JAudioTagger selects its reader by extension,
+    // and the custom handlers also inspect the file name.
+    val suffix = if (target.extension.isEmpty()) "" else ".${target.extension}"
+    val temp = File(
+        target.parentFile,
+        ".${target.nameWithoutExtension}.${System.nanoTime()}.tmp$suffix",
+    )
     try {
         target.copyTo(temp, overwrite = true)
         edit(temp)

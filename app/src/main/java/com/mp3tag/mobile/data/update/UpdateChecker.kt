@@ -17,6 +17,7 @@ data class ReleaseInfo(
     val releasePageUrl: String,
     val apkDownloadUrl: String?,
     val apkFileName: String?,
+    val releaseNotes: String? = null,
 )
 
 data class UpdateCheckResult(
@@ -27,8 +28,8 @@ data class UpdateCheckResult(
 )
 
 object UpdateChecker {
-    const val CURRENT_VERSION_NAME = "0.7.1"
-    const val CURRENT_VERSION_CODE = 24
+    const val CURRENT_VERSION_NAME = "0.8.0"
+    const val CURRENT_VERSION_CODE = 27
 
     const val GITHUB_REPO_URL = "https://github.com/areyouanand/mp3tag-mobile"
     const val GITHUB_RELEASES_URL = "https://github.com/areyouanand/mp3tag-mobile/releases"
@@ -134,6 +135,7 @@ object UpdateChecker {
                     releasePageUrl = htmlUrl,
                     apkDownloadUrl = apkUrl,
                     apkFileName = apkName,
+                    releaseNotes = obj.optString("body", "").takeIf { it.isNotBlank() },
                 )
             )
         }

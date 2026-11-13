@@ -1,5 +1,7 @@
 package com.mp3tag.mobile.data.convert
 
+import java.io.File
+
 /** Output formats offered by the converter, mapped onto FFmpeg muxers/encoders. */
 enum class ConvertTarget(
     val label: String,
@@ -100,10 +102,11 @@ enum class ConvertTarget(
         AIFF -> if (bitDepth >= 24) "pcm_s24be" else "pcm_s16be"
     }
 
-    /** FLAC / WavPack compression effort; 0 lets the encoder choose. */
-    fun qualityFor(): Int = when (this) {
-        FLAC -> 8
-        WAVPACK -> 4
+    /** FLAC / WavPack compression effort; [override] 0 lets the encoder choose. */
+    fun qualityFor(override: Int = 0): Int = when {
+        override > 0 -> override
+        this == FLAC -> 8
+        this == WAVPACK -> 4
         else -> 0
     }
 
@@ -124,6 +127,14 @@ data class ConvertSettings(
     val bitDepth: Int = 16,
     val keepTagsAndCover: Boolean = true,
     val deleteSourceAfterSuccess: Boolean = false,
+    /** Optional subfolder under the source folder ("" = same folder). */
+    val outputSubfolder: String = "",
+    /** Optional filename pattern, e.g. "%artist%/%album%/%track% %title%". */
+    val namePattern: String = "",
+    /** Copy the source file's modified timestamp to the output. */
+    val preserveTimestamps: Boolean = true,
+    /** FLAC/WavPack compression level; 0 = target default. */
+    val compressionLevel: Int = 0,
 ) {
     fun normalized(): ConvertSettings {
         val allowed = target.bitratesKbps
@@ -136,7 +147,18 @@ data class ConvertSettings(
             0, 22050, 32000, 44100, 48000, 88200, 96000, 176400, 192000 -> sampleRateHz
             else -> 0
         }
-        return copy(bitrateKbps = bitrate, sampleRateHz = rate, channels = channels.coerceIn(0, 2))
+        val safeSubfolder = outputSubfolder
+            .split('/', '\\')
+            .map { it.trim() }
+            .filter { it.isNotEmpty() && it != "." && it != ".." }
+            .joinToString(File.separator)
+        return copy(
+            bitrateKbps = bitrate,
+            sampleRateHz = rate,
+            channels = channels.coerceIn(0, 2),
+            outputSubfolder = safeSubfolder,
+            compressionLevel = compressionLevel.coerceIn(0, 12),
+        )
     }
 }
 

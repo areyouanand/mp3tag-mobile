@@ -263,7 +263,7 @@ fun RenameFromTagsDialog(
         snapshots.map { snapshot ->
             val newName = segments?.let { segs ->
                 PatternParser.buildFileName(segs, snapshot.fields)?.let { base ->
-                    "${PatternParser.sanitizeFileName(base)}.${File(snapshot.path).extension.ifBlank { "dat" }}"
+                    "${PatternParser.sanitizeRelativePath(base)}.${File(snapshot.path).extension.ifBlank { "dat" }}"
                 }
             }
             Triple(snapshot, newName, segments == null)
@@ -306,7 +306,7 @@ fun RenameFromTagsDialog(
                             onValueChange = { pattern = it },
                             singleLine = true,
                             label = { Text("Pattern") },
-                            supportingText = { Text("Builds the new file name from tag values") },
+                            supportingText = { Text("Use / to move files into subfolders, e.g. %albumartist%/%album%/%track% %title%") },
                             isError = segments == null && pattern.isNotBlank(),
                             modifier = Modifier.fillMaxWidth(),
                         )

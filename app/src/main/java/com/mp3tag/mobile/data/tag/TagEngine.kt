@@ -13,6 +13,12 @@ import org.jaudiotagger.tag.id3.ID3v23Tag
 import org.jaudiotagger.tag.id3.ID3v24Tag
 import org.jaudiotagger.tag.id3.framebody.FrameBodyTXXX
 import org.jaudiotagger.tag.images.ArtworkFactory
+import org.jaudiotagger.tag.mp4.Mp4FieldKey
+import org.jaudiotagger.tag.mp4.Mp4Tag
+import org.jaudiotagger.tag.mp4.field.Mp4TagReverseDnsField
+import org.jaudiotagger.tag.asf.AsfTagTextField
+import org.jaudiotagger.tag.Tag
+import org.jaudiotagger.tag.TagTextField
 import org.jaudiotagger.tag.reference.ID3V2Version
 import org.jaudiotagger.tag.wav.WavTag
 import java.io.File
@@ -65,7 +71,9 @@ object TagEngine {
             AudioFormat.DFF -> DffTagHandler.write(file, request, options)
             AudioFormat.OPUS -> OpusTagHandler.write(file, request)
             AudioFormat.APE, AudioFormat.WAVPACK -> ApeTagHandler.write(file, request)
-            else -> writeWithJAudioTagger(file, format, request, options)
+            // JAudioTagger rewrites files in place. Work on a temporary sibling so a
+            // crash/power loss mid-save leaves the original byte-for-byte intact.
+            else -> writeSafely(file) { temp -> writeWithJAudioTagger(temp, format, request, options) }
         }
     }
 
@@ -86,10 +94,66 @@ object TagEngine {
             AudioFormat.FLAC, AudioFormat.OGG -> {
                 vorbisTagOf(readAudioFile(file).tag)?.let { vorbisCustomFields(it) } ?: emptyMap()
             }
-            // MP4 freeform atoms and ASF attributes are not enumerated yet.
+            AudioFormat.M4A -> readMp4CustomFields(readAudioFile(file).tag)
+            AudioFormat.WMA -> readAsfCustomFields(readAudioFile(file).tag)
             else -> emptyMap()
         }
     }.getOrDefault(emptyMap())
+
+    // ------------------------------------------------------------------
+    // MP4 free-form ("----:com.apple.iTunes:KEY") and ASF attributes
+    // ------------------------------------------------------------------
+
+    /** Reverse-DNS descriptors that JAudioTagger already maps to a [FieldKey]. */
+    private val KNOWN_MP4_REVERSE_DNS: Set<String> = runCatching {
+        Mp4FieldKey.entries
+            .filter { it.isReverseDnsType }
+            .map { it.fieldName.substringAfterLast(':').uppercase() }
+            .toSet()
+    }.getOrDefault(emptySet())
+
+    private val KNOWN_ASF_NAMES: Set<String> = runCatching {
+        org.jaudiotagger.tag.asf.AsfFieldKey.entries.map { it.fieldName.uppercase() }.toSet()
+    }.getOrDefault(emptySet())
+
+    private fun readMp4CustomFields(tag: Tag?): Map<String, String> {
+        if (tag !is Mp4Tag) return emptyMap()
+        val out = LinkedHashMap<String, String>()
+        for (field in tag.fields.asSequence()) {
+            val reverse = field as? Mp4TagReverseDnsField ?: continue
+            val key = runCatching { reverse.descriptor }.getOrNull()?.trim() ?: continue
+            if (key.isEmpty()) continue
+            val upper = key.uppercase()
+            if (upper in KNOWN_MP4_REVERSE_DNS) continue
+            val value = runCatching { reverse.content }.getOrNull()?.trim() ?: continue
+            if (value.isNotEmpty()) out[upper] = value
+        }
+        return out
+    }
+
+    private fun readAsfCustomFields(tag: Tag?): Map<String, String> {
+        val out = LinkedHashMap<String, String>()
+        val fields: List<org.jaudiotagger.tag.TagField> =
+            tag?.getFields()?.asSequence()?.toList() ?: emptyList()
+        for (field in fields) {
+            if (field.isBinary) continue
+            val key = runCatching { field.id }.getOrNull()?.trim() ?: continue
+            if (key.isEmpty()) continue
+            val upper = key.uppercase()
+            if (upper in KNOWN_ASF_NAMES) continue
+            // Internal encoder metadata (WM/EncodingSettings, WM/EncodingTime, …)
+            // is not user tag data; ReplayGain/R128 attributes are kept.
+            if (upper.startsWith("WM/") &&
+                !upper.startsWith("WM/REPLAYGAIN") &&
+                !upper.startsWith("WM/R128")
+            ) {
+                continue
+            }
+            val value = (field as? TagTextField)?.content?.trim() ?: continue
+            if (value.isNotEmpty()) out[upper] = value
+        }
+        return out
+    }
 
     private fun readAudioFile(file: File): AudioFile =
         if (file.extension.lowercase() == "asf") AudioFileIO.readAs(file, "wma")
@@ -174,6 +238,12 @@ object TagEngine {
                         }
                     }
                     out
+                } else if (tag is Mp4Tag) {
+                    val wanted = keys.map { it.uppercase() }.toSet()
+                    readMp4CustomFields(tag).filterKeys { it in wanted }
+                } else if (tag is AsfTag) {
+                    val wanted = keys.map { it.uppercase() }.toSet()
+                    readAsfCustomFields(tag).filterKeys { it in wanted }
                 } else {
                     emptyMap()
                 }
@@ -196,13 +266,18 @@ object TagEngine {
 
         // Scan every standard field key that has a value in this file; the editor
         // uses this to offer "fields present in the files" beyond the core set.
+        val multiFields = LinkedHashMap<FieldKey, List<String>>()
         val all: Map<FieldKey, String> = FieldKey.entries
             .filter { it != FieldKey.COVER_ART }
             .mapNotNull { key ->
-                runCatching { tag?.getFirst(key) }.getOrNull()
-                    ?.trim()
-                    ?.takeIf { it.isNotEmpty() }
-                    ?.let { key to it }
+                val values = runCatching { tag?.getAll(key) }.getOrNull()
+                    ?.map { it.trim() }
+                    ?.filter { it.isNotEmpty() }
+                    ?.distinct()
+                    .orEmpty()
+                if (values.isEmpty()) return@mapNotNull null
+                if (values.size > 1) multiFields[key] = values
+                key to values.joinToString(MULTI_VALUE_SEPARATOR)
             }
             .toMap()
         val fields = normalizeSplitFieldsInternal(all)
@@ -231,6 +306,7 @@ object TagEngine {
             fields = fields,
             cover = cover,
             fileSizeBytes = file.length(),
+            multiFields = multiFields,
         )
     }
 
@@ -257,24 +333,40 @@ object TagEngine {
             }
         }
 
-        // Free-form custom fields (TXXX for ID3, arbitrary keys for VorbisComment).
+        // Multi-value tags: delete the old frames/comments and add one per value so
+        // two artists/genres survive instead of collapsing into "A; B".
+        if (request.multiFields.isNotEmpty()) {
+            val multiTarget: Tag = id3TagOf(tag) ?: vorbisTagOf(tag) ?: tag
+            request.multiFields.forEach { (key, values) ->
+                val clean = values.map { it.trim() }.filter { it.isNotEmpty() }
+                runCatching { multiTarget.deleteField(key) }
+                clean.forEach { value ->
+                    runCatching { multiTarget.addField(key, value) }
+                }
+            }
+        }
+
+        // Free-form custom fields (TXXX for ID3, arbitrary keys for VorbisComment,
+        // reverse-DNS atoms for MP4, named attributes for ASF).
         if (request.customFields.isNotEmpty()) {
             val id3Tag = id3TagOf(tag)
             val vorbisTag = vorbisTagOf(tag)
             request.customFields.forEach { (key, value) ->
-                if (id3Tag != null) {
-                    Id3CustomFields.write(id3Tag, key, value)
-                } else if (vorbisTag != null) {
-                    val attempt = if (value.isNullOrBlank()) {
-                        runCatching { vorbisTag.deleteField(key) }
-                    } else {
-                        runCatching { vorbisTag.setField(key, value) }
+                when {
+                    id3Tag != null -> Id3CustomFields.write(id3Tag, key, value)
+                    vorbisTag != null -> {
+                        val attempt = if (value.isNullOrBlank()) {
+                            runCatching { vorbisTag.deleteField(key) }
+                        } else {
+                            runCatching { vorbisTag.setField(key, value) }
+                        }
+                        if (attempt.isFailure) {
+                            android.util.Log.w("TagEngine", "Vorbis custom field '$key' failed", attempt.exceptionOrNull())
+                        }
                     }
-                    if (attempt.isFailure) {
-                        android.util.Log.w("TagEngine", "Vorbis custom field '$key' failed", attempt.exceptionOrNull())
-                    }
+                    tag is Mp4Tag -> writeMp4CustomField(tag, key, value)
+                    tag is AsfTag -> writeAsfCustomField(tag, key, value)
                 }
-                // MP4 / ASF custom fields are not handled here yet.
             }
         }
 
@@ -306,6 +398,31 @@ object TagEngine {
         }
 
         af.commit()
+    }
+
+    private fun writeMp4CustomField(tag: Mp4Tag, key: String, value: String?) {
+        val cleanKey = key.trim()
+        if (cleanKey.isEmpty()) return
+        val id = "----:com.apple.iTunes:$cleanKey"
+        runCatching { tag.deleteField(id) }
+        if (value.isNullOrBlank()) return
+        runCatching {
+            tag.setField(Mp4TagReverseDnsField(id, "com.apple.iTunes", cleanKey, value))
+        }.onFailure {
+            android.util.Log.w("TagEngine", "MP4 free-form field '$cleanKey' failed", it)
+        }
+    }
+
+    private fun writeAsfCustomField(tag: AsfTag, key: String, value: String?) {
+        val cleanKey = key.trim()
+        if (cleanKey.isEmpty()) return
+        runCatching { tag.deleteField(cleanKey) }
+        if (value.isNullOrBlank()) return
+        runCatching {
+            tag.setField(AsfTagTextField(cleanKey, value))
+        }.onFailure {
+            android.util.Log.w("TagEngine", "ASF attribute '$cleanKey' failed", it)
+        }
     }
 
     /**

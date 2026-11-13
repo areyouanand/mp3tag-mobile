@@ -141,6 +141,62 @@ class AudioConverterInstrumentedTest {
     )
 
     @Test
+    fun multiValueArtistsSurviveConversion() {
+        val source = taggedWav("multi.wav")
+        com.mp3tag.mobile.data.tag.TagEngine.write(
+            source,
+            com.mp3tag.mobile.data.tag.WriteRequest(
+                multiFields = mapOf(
+                    org.jaudiotagger.tag.FieldKey.ARTIST to listOf("First Artist", "Second Artist"),
+                ),
+            ),
+            com.mp3tag.mobile.data.tag.WriteOptions(Id3Version.V2_3),
+        )
+        assertEquals(
+            listOf("First Artist", "Second Artist"),
+            com.mp3tag.mobile.data.tag.TagEngine.read(source)
+                .multiFields[org.jaudiotagger.tag.FieldKey.ARTIST],
+        )
+
+        for (target in listOf(ConvertTarget.FLAC, ConvertTarget.OPUS)) {
+            val result = runConversion(source, target)
+            assertTrue("$target failed: ${result.error}", result.outputPath != null)
+            val snapshot = com.mp3tag.mobile.data.tag.TagEngine.read(File(result.outputPath!!))
+            assertEquals(
+                "$target (warning=${result.warning})",
+                listOf("First Artist", "Second Artist"),
+                snapshot.multiFields[org.jaudiotagger.tag.FieldKey.ARTIST],
+            )
+        }
+    }
+
+    @Test
+    fun customFieldsSurviveM4aAndWma() {
+        val source = taggedWav("mp4-custom.wav")
+        com.mp3tag.mobile.data.tag.TagEngine.write(
+            source,
+            com.mp3tag.mobile.data.tag.WriteRequest(
+                customFields = mapOf(
+                    "REPLAYGAIN_TRACK_GAIN" to "-6.5 dB",
+                    "MY_CUSTOM_FIELD" to "hello-mp4",
+                ),
+            ),
+            com.mp3tag.mobile.data.tag.WriteOptions(Id3Version.V2_3),
+        )
+        for (target in listOf(ConvertTarget.M4A, ConvertTarget.WMA)) {
+            val result = runConversion(source, target)
+            assertTrue("$target failed: ${result.error}", result.outputPath != null)
+            val custom = com.mp3tag.mobile.data.tag.TagEngine.readAllCustomFields(File(result.outputPath!!))
+            assertEquals(
+                "$target custom (warning=${result.warning})",
+                "-6.5 dB",
+                custom["REPLAYGAIN_TRACK_GAIN"],
+            )
+            assertEquals("$target custom (warning=${result.warning})", "hello-mp4", custom["MY_CUSTOM_FIELD"])
+        }
+    }
+
+    @Test
     fun coversSurviveConversion() {
         val source = taggedWav("cover-matrix.wav")
         val supported = listOf(
@@ -153,6 +209,7 @@ class AudioConverterInstrumentedTest {
             ConvertTarget.WAV,
             ConvertTarget.AIFF,
             ConvertTarget.WMA,
+            ConvertTarget.WAVPACK,
         )
         for (target in supported) {
             val result = runConversion(source, target)
@@ -161,15 +218,6 @@ class AudioConverterInstrumentedTest {
             assertTrue(
                 "$target lost the cover (warning=${result.warning})",
                 snapshot.cover != null,
-            )
-        }
-
-        // WavPack's APEv2 cover round-trip is still broken; it must not fail silently.
-        val wv = runConversion(source, ConvertTarget.WAVPACK)
-        if (wv.outputPath != null) {
-            assertTrue(
-                "WavPack silently dropped the cover (warning=${wv.warning})",
-                wv.warning?.contains("Cover art not copied") == true,
             )
         }
     }

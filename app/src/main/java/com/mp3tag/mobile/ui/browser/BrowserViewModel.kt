@@ -8,15 +8,43 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.mp3tag.mobile.data.fs.FolderScanner
 import com.mp3tag.mobile.data.prefs.AppPrefs
+import com.mp3tag.mobile.data.tag.TagEngine
+import com.mp3tag.mobile.util.DeviceProfile
+import org.jaudiotagger.tag.FieldKey
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import java.io.File
+
+/** Tags read lazily for the current folder, used for search/sort/duplicates. */
+data class BrowserTagInfo(
+    val title: String = "",
+    val artist: String = "",
+    val album: String = "",
+    val albumArtist: String = "",
+    val track: Int = Int.MAX_VALUE,
+    val disc: Int = Int.MAX_VALUE,
+    val durationSeconds: Int = 0,
+    val year: String = "",
+) {
+    val searchText: String
+        get() = listOf(title, artist, album, albumArtist, year).filter { it.isNotBlank() }.joinToString(" ")
+}
+
+enum class BrowserSort { NAME, TITLE, ARTIST, ALBUM, TRACK, DURATION, SIZE, DATE }
+
+/** One group of files that appear to be duplicates. */
+data class DuplicateGroup(val label: String, val paths: List<String>)
 
 /** One mounted storage volume (internal storage, SD card, USB OTG...). */
 data class StorageVolumeInfo(
@@ -38,17 +66,54 @@ data class BrowserState(
     val error: String? = null,
     val recents: List<String> = emptyList(),
     val volumes: List<StorageVolumeInfo> = emptyList(),
+    val tagInfo: Map<String, BrowserTagInfo> = emptyMap(),
+    val sortMode: BrowserSort = BrowserSort.NAME,
+    val sortAscending: Boolean = true,
+    val tagScanProgress: String? = null,
+    val duplicateGroups: List<DuplicateGroup>? = null,
 ) {
     val totalSelectedCount: Int
         get() = selectedPaths.size + selectedFolderPaths.size
+
+    /** Files in the chosen sort order (tag-aware). */
+    val displayedAudioFiles: List<File>
+        get() {
+            val comparator = when (sortMode) {
+                BrowserSort.NAME -> compareBy<File> { it.name.lowercase() }
+                BrowserSort.TITLE -> compareBy { tagInfo[it.absolutePath]?.title?.lowercase().orEmpty() }
+                BrowserSort.ARTIST -> compareBy { tagInfo[it.absolutePath]?.artist?.lowercase().orEmpty() }
+                BrowserSort.ALBUM -> compareBy { tagInfo[it.absolutePath]?.album?.lowercase().orEmpty() }
+                BrowserSort.TRACK -> compareBy<File> {
+                    val tag = tagInfo[it.absolutePath]
+                    (tag?.disc ?: Int.MAX_VALUE) * 100_000L + (tag?.track ?: Int.MAX_VALUE)
+                }.thenBy { tagInfo[it.absolutePath]?.title?.lowercase().orEmpty() }
+                BrowserSort.DURATION -> compareBy { tagInfo[it.absolutePath]?.durationSeconds ?: 0 }
+                BrowserSort.SIZE -> compareBy { it.length() }
+                BrowserSort.DATE -> compareBy { it.lastModified() }
+            }
+            // Natural ordering is still nicer for plain names and equal tag values.
+            val nameComparator = Comparator<File> { a, b ->
+                FolderScanner.compareNatural(a.name, b.name)
+            }
+            val sorted = audioFiles.sortedWith(comparator.then(nameComparator))
+            return if (sortAscending) sorted else sorted.reversed()
+        }
 }
 
 class BrowserViewModel(application: Application) : AndroidViewModel(application) {
 
     private val prefs = AppPrefs(application)
     private var loadJob: Job? = null
+    private var tagJob: Job? = null
 
-    private val _state = MutableStateFlow(BrowserState(recents = prefs.recentFolders))
+    private val _state = MutableStateFlow(
+        BrowserState(
+            recents = prefs.recentFolders,
+            sortMode = runCatching { BrowserSort.valueOf(prefs.browserSortMode) }
+                .getOrDefault(BrowserSort.NAME),
+            sortAscending = prefs.browserSortAscending,
+        ),
+    )
     val state: StateFlow<BrowserState> = _state.asStateFlow()
 
     val selectedFiles: List<File>
@@ -94,8 +159,14 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                         directories = dirs,
                         audioFiles = files,
                         fileSubtitles = subtitles,
+                        tagInfo = emptyMap(),
+                        duplicateGroups = null,
+                        tagScanProgress = null,
                     )
                 }
+            }
+            if (result.isSuccess && _state.value.directory == directory) {
+                loadTagInfo(result.getOrThrow().audioFiles)
             }
         }
     }
@@ -121,6 +192,128 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     fun reloadPrefs() {
         _state.update { it.copy(recents = prefs.recentFolders) }
     }
+
+    // ------------------------------------------------------------------
+    // Tag-aware search, sort and duplicate detection
+    // ------------------------------------------------------------------
+
+    /** Reads tags for the current folder in the background (bounded parallelism). */
+    private fun loadTagInfo(files: List<File>) {
+        tagJob?.cancel()
+        if (files.isEmpty()) return
+        tagJob = viewModelScope.launch {
+            _state.update { it.copy(tagScanProgress = "Reading tags 0 / ${files.size}…") }
+            val info = HashMap<String, BrowserTagInfo>()
+            val done = java.util.concurrent.atomic.AtomicInteger(0)
+            coroutineScope {
+                val sem = Semaphore(4)
+                files.take(1000).map { file ->
+                    async {
+                        sem.withPermit {
+                            val snapshot = runCatching { TagEngine.read(file) }.getOrNull()
+                            if (snapshot != null) {
+                                val tags = BrowserTagInfo(
+                                    title = snapshot.fields[FieldKey.TITLE].orEmpty(),
+                                    artist = snapshot.fields[FieldKey.ARTIST].orEmpty(),
+                                    album = snapshot.fields[FieldKey.ALBUM].orEmpty(),
+                                    albumArtist = snapshot.fields[FieldKey.ALBUM_ARTIST].orEmpty(),
+                                    track = snapshot.fields[FieldKey.TRACK]?.toIntOrNull() ?: Int.MAX_VALUE,
+                                    disc = snapshot.fields[FieldKey.DISC_NO]?.toIntOrNull() ?: Int.MAX_VALUE,
+                                    durationSeconds = snapshot.durationSeconds ?: 0,
+                                    year = snapshot.fields[FieldKey.YEAR].orEmpty(),
+                                )
+                                synchronized(info) { info[file.absolutePath] = tags }
+                            }
+                            val count = done.incrementAndGet()
+                            if (count % 8 == 0 || count == files.size) {
+                                _state.update { it.copy(tagScanProgress = "Reading tags $count / ${files.size}…") }
+                            }
+                        }
+                    }
+                }.awaitAll()
+            }
+            _state.update {
+                it.copy(
+                    tagInfo = it.tagInfo + info,
+                    tagScanProgress = null,
+                )
+            }
+        }
+    }
+
+    fun setSort(mode: BrowserSort) {
+        val current = _state.value
+        val ascending = if (current.sortMode == mode) !current.sortAscending else true
+        prefs.browserSortMode = mode.name
+        prefs.browserSortAscending = ascending
+        _state.update { it.copy(sortMode = mode, sortAscending = ascending) }
+    }
+
+    /** Groups files in the current folder by ARTIST + TITLE (case-insensitive). */
+    fun findDuplicates() {
+        val current = _state.value
+        if (current.audioFiles.isEmpty()) {
+            _state.update { it.copy(statusMessage = "This folder has no audio files") }
+            return
+        }
+        viewModelScope.launch {
+            _state.update { it.copy(statusMessage = "Looking for duplicates…") }
+            val info = current.tagInfo.ifEmpty {
+                val map = HashMap<String, BrowserTagInfo>()
+                withContext(Dispatchers.IO) {
+                    current.audioFiles.forEach { file ->
+                        runCatching { TagEngine.read(file) }.getOrNull()?.let { snapshot ->
+                            map[file.absolutePath] = BrowserTagInfo(
+                                title = snapshot.fields[FieldKey.TITLE].orEmpty(),
+                                artist = snapshot.fields[FieldKey.ARTIST].orEmpty(),
+                                album = snapshot.fields[FieldKey.ALBUM].orEmpty(),
+                                albumArtist = snapshot.fields[FieldKey.ALBUM_ARTIST].orEmpty(),
+                                track = snapshot.fields[FieldKey.TRACK]?.toIntOrNull() ?: Int.MAX_VALUE,
+                                disc = snapshot.fields[FieldKey.DISC_NO]?.toIntOrNull() ?: Int.MAX_VALUE,
+                                durationSeconds = snapshot.durationSeconds ?: 0,
+                                year = snapshot.fields[FieldKey.YEAR].orEmpty(),
+                            )
+                        }
+                    }
+                }
+                map
+            }
+            val groups = current.audioFiles
+                .mapNotNull { file ->
+                    val tag = info[file.absolutePath] ?: return@mapNotNull null
+                    if (tag.artist.isBlank() || tag.title.isBlank()) return@mapNotNull null
+                    "${tag.artist.trim().lowercase()}\u0001${tag.title.trim().lowercase()}" to file
+                }
+                .groupBy({ it.first }, { it.second })
+                .filterValues { it.size > 1 }
+                .map { (key, files) ->
+                    val parts = key.split('\u0001')
+                    DuplicateGroup(
+                        label = "${parts.getOrNull(0).orEmpty()} — ${parts.getOrNull(1).orEmpty()}",
+                        paths = files.map { it.absolutePath },
+                    )
+                }
+                .sortedBy { it.label }
+            _state.update {
+                it.copy(
+                    duplicateGroups = groups,
+                    statusMessage = if (groups.isEmpty()) {
+                        "No duplicates found in this folder"
+                    } else {
+                        "Found ${groups.size} duplicate group(s)"
+                    },
+                )
+            }
+        }
+    }
+
+    fun selectDuplicateExtras() {
+        val groups = _state.value.duplicateGroups.orEmpty()
+        val extras = groups.flatMap { it.paths.drop(1) }.toSet()
+        _state.update { it.copy(selectedPaths = extras, statusMessage = "${extras.size} duplicate file(s) selected") }
+    }
+
+    fun dismissDuplicates() = _state.update { it.copy(duplicateGroups = null) }
 
     fun toggleSelect(file: File) = _state.update {
         val selection = it.selectedPaths.toMutableSet()

@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
@@ -34,9 +35,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Audiotrack
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.FindReplace
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
@@ -48,6 +51,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Smartphone
+import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material.icons.filled.Usb
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
@@ -132,6 +136,7 @@ fun BrowserScreen(
 
     var filter by rememberSaveable { mutableStateOf("") }
     var menuSheetOpen by rememberSaveable { mutableStateOf(false) }
+    var sortSheetOpen by rememberSaveable { mutableStateOf(false) }
     var storageDialogOpen by rememberSaveable { mutableStateOf(false) }
 
     val root = state.directory
@@ -150,9 +155,16 @@ fun BrowserScreen(
         if (filter.isBlank()) state.directories
         else state.directories.filter { it.name.contains(filter, ignoreCase = true) }
     }
-    val filteredFiles = remember(state.audioFiles, filter) {
-        if (filter.isBlank()) state.audioFiles
-        else state.audioFiles.filter { it.name.contains(filter, ignoreCase = true) }
+    val filteredFiles = remember(state.displayedAudioFiles, state.tagInfo, filter) {
+        val query = filter.trim().lowercase()
+        if (query.isBlank()) {
+            state.displayedAudioFiles
+        } else {
+            state.displayedAudioFiles.filter { file ->
+                file.name.contains(query, ignoreCase = true) ||
+                    state.tagInfo[file.absolutePath]?.searchText?.lowercase()?.contains(query) == true
+            }
+        }
     }
 
     val triggerEditSelected = {
@@ -432,6 +444,22 @@ fun BrowserScreen(
                     },
                 )
                 ListItem(
+                    headlineContent = { Text("Sort by…") },
+                    leadingContent = { Icon(Icons.Filled.Sort, contentDescription = null) },
+                    modifier = Modifier.clickable {
+                        menuSheetOpen = false
+                        sortSheetOpen = true
+                    },
+                )
+                ListItem(
+                    headlineContent = { Text("Find duplicates…") },
+                    leadingContent = { Icon(Icons.Filled.FindReplace, contentDescription = null) },
+                    modifier = Modifier.clickable {
+                        menuSheetOpen = false
+                        viewModel.findDuplicates()
+                    },
+                )
+                ListItem(
                     headlineContent = { Text("Select all") },
                     leadingContent = { Icon(Icons.Filled.SelectAll, contentDescription = null) },
                     modifier = Modifier.clickable {
@@ -477,6 +505,89 @@ fun BrowserScreen(
                 Spacer(Modifier.height(36.dp))
             }
         }
+    }
+
+    if (sortSheetOpen) {
+        ModalBottomSheet(onDismissRequest = { sortSheetOpen = false }) {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                Text(
+                    text = "Sort by (tap again to reverse)",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                )
+                listOf(
+                    BrowserSort.NAME to "File name",
+                    BrowserSort.TITLE to "Title",
+                    BrowserSort.ARTIST to "Artist",
+                    BrowserSort.ALBUM to "Album",
+                    BrowserSort.TRACK to "Disc / track",
+                    BrowserSort.DURATION to "Duration",
+                    BrowserSort.SIZE to "File size",
+                    BrowserSort.DATE to "Modified date",
+                ).forEach { (mode, label) ->
+                    val selected = state.sortMode == mode
+                    ListItem(
+                        headlineContent = {
+                            Text(
+                                if (selected) {
+                                    "$label (${if (state.sortAscending) "ascending" else "descending"})"
+                                } else {
+                                    label
+                                },
+                            )
+                        },
+                        leadingContent = { Icon(Icons.Filled.Sort, contentDescription = null) },
+                        trailingContent = {
+                            if (selected) Icon(Icons.Filled.CheckCircle, contentDescription = null)
+                        },
+                        modifier = Modifier.clickable {
+                            viewModel.setSort(mode)
+                            sortSheetOpen = false
+                        },
+                    )
+                }
+                Spacer(Modifier.navigationBarsPadding())
+                Spacer(Modifier.height(36.dp))
+            }
+        }
+    }
+
+    state.duplicateGroups?.let { groups ->
+        AlertDialog(
+            onDismissRequest = viewModel::dismissDuplicates,
+            title = { Text("Duplicate tracks (${groups.size})") },
+            text = {
+                Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                    if (groups.isEmpty()) {
+                        Text("No files with the same artist and title were found in this folder.")
+                    } else {
+                        groups.take(40).forEach { group ->
+                            Text(group.label, style = MaterialTheme.typography.bodyMedium)
+                            group.paths.forEach { path ->
+                                Text(
+                                    "• ${File(path).name}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                            Spacer(Modifier.height(8.dp))
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                if (groups.isNotEmpty()) {
+                    TextButton(onClick = {
+                        viewModel.selectDuplicateExtras()
+                        viewModel.dismissDuplicates()
+                    }) { Text("Select extras") }
+                }
+                TextButton(onClick = viewModel::dismissDuplicates) { Text("Close") }
+            },
+        )
     }
 
     if (storageDialogOpen) {

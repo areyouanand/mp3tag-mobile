@@ -42,6 +42,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -129,6 +130,7 @@ private fun ConvertSetupView(
     var rateSheet by rememberSaveable { mutableStateOf(false) }
     var channelSheet by rememberSaveable { mutableStateOf(false) }
     var depthSheet by rememberSaveable { mutableStateOf(false) }
+    var compressionSheet by rememberSaveable { mutableStateOf(false) }
     var detailsSheet by rememberSaveable { mutableStateOf(false) }
     var confirmDeleteDialog by rememberSaveable { mutableStateOf(false) }
 
@@ -202,8 +204,8 @@ private fun ConvertSetupView(
                         PickerRow(
                             title = "Lossless",
                             subtitle = when (settings.target) {
-                                ConvertTarget.FLAC -> "FLAC compression level ${settings.target.qualityFor()} (slower, smaller)"
-                                ConvertTarget.WAVPACK -> "WavPack compression level ${settings.target.qualityFor()}"
+                                ConvertTarget.FLAC -> "FLAC compression level ${settings.target.qualityFor(settings.compressionLevel)} (slower, smaller)"
+                                ConvertTarget.WAVPACK -> "WavPack compression level ${settings.target.qualityFor(settings.compressionLevel)}"
                                 else -> "No quality loss"
                             },
                             enabled = false,
@@ -232,6 +234,60 @@ private fun ConvertSetupView(
                             subtitle = "Bit depth",
                             enabled = !running,
                             onClick = { depthSheet = true },
+                        )
+                    }
+                }
+            }
+
+            SectionTitle("Output location")
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column {
+                    OutlinedTextField(
+                        value = settings.outputSubfolder,
+                        onValueChange = {
+                            viewModel.updateSettings(settings.copy(outputSubfolder = it))
+                        },
+                        label = { Text("Subfolder (optional)") },
+                        placeholder = { Text("e.g. Converted") },
+                        singleLine = true,
+                        enabled = !running,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 6.dp),
+                    )
+                    OutlinedTextField(
+                        value = settings.namePattern,
+                        onValueChange = {
+                            viewModel.updateSettings(settings.copy(namePattern = it))
+                        },
+                        label = { Text("Filename pattern (optional)") },
+                        placeholder = { Text("%artist% - %title%") },
+                        supportingText = {
+                            Text("Blank keeps the original name. Use %title%, %artist%, %album%, %track%… and / for subfolders.")
+                        },
+                        singleLine = true,
+                        enabled = !running,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 6.dp),
+                    )
+                    HorizontalDivider()
+                    SwitchRow(
+                        title = "Preserve modified date",
+                        subtitle = "Copies the source file's timestamp to the output",
+                        checked = settings.preserveTimestamps,
+                        enabled = !running,
+                        onCheckedChange = {
+                            viewModel.updateSettings(settings.copy(preserveTimestamps = it))
+                        },
+                    )
+                    if (settings.target == ConvertTarget.FLAC || settings.target == ConvertTarget.WAVPACK) {
+                        HorizontalDivider()
+                        PickerRow(
+                            title = "Compression level ${settings.target.qualityFor(settings.compressionLevel)}",
+                            subtitle = "Higher = smaller file, slower encode",
+                            enabled = !running,
+                            onClick = { compressionSheet = true },
                         )
                     }
                 }
@@ -361,6 +417,26 @@ private fun ConvertSetupView(
                     onClick = {
                         viewModel.updateSettings(settings.copy(bitrateKbps = rate))
                         bitrateSheet = false
+                    },
+                )
+            }
+        }
+    }
+
+    if (compressionSheet) {
+        ChoiceSheet(title = "Compression level", onDismiss = { compressionSheet = false }) {
+            listOf(0, 2, 4, 6, 8, 10, 12).forEach { level ->
+                SheetRow(
+                    title = if (level == 0) "Encoder default" else "Level $level",
+                    subtitle = when {
+                        level <= 2 -> "Fastest encode, larger file"
+                        level >= 10 -> "Smallest file, slowest encode"
+                        else -> "Balanced"
+                    },
+                    selected = (if (settings.compressionLevel == 0) 0 else settings.compressionLevel) == level,
+                    onClick = {
+                        viewModel.updateSettings(settings.copy(compressionLevel = level))
+                        compressionSheet = false
                     },
                 )
             }

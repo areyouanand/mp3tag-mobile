@@ -4,6 +4,10 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.clickable
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -40,6 +44,7 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -55,6 +60,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -120,6 +126,39 @@ fun SettingsScreen(
     var checkingUpdate by remember { mutableStateOf(false) }
     var updateResult by remember { mutableStateOf<UpdateCheckResult?>(null) }
     var updateError by remember { mutableStateOf<String?>(null) }
+    var showLicenses by remember { mutableStateOf(false) }
+    var settingsBackupMessage by remember { mutableStateOf<String?>(null) }
+
+    val exportSettings = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json"),
+    ) { uri ->
+        uri?.let {
+            val ok = runCatching {
+                context.contentResolver.openOutputStream(it)?.use { stream ->
+                    stream.write(prefs.exportSettingsJson().toByteArray())
+                }
+            }.isSuccess
+            settingsBackupMessage = if (ok) "Settings backed up" else "Could not write the backup"
+        }
+    }
+
+    val importSettings = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        uri?.let {
+            val text = runCatching {
+                context.contentResolver.openInputStream(it)?.use { stream ->
+                    stream.readBytes().toString(Charsets.UTF_8)
+                }
+            }.getOrNull()
+            val ok = text != null && prefs.importSettingsJson(text)
+            settingsBackupMessage = if (ok) {
+                "Settings restored — reopen Settings to see every change"
+            } else {
+                "That file is not an MP3Tag Mobile settings backup"
+            }
+        }
+    }
 
     val triggerUpdateCheck: (UpdateChannel) -> Unit = { channel ->
         if (!checkingUpdate) {
@@ -245,8 +284,16 @@ fun SettingsScreen(
                                     onCheckUpdates = { triggerUpdateCheck(updateChannel) },
                                     onOpenUrl = { url -> openExternalUrl(context, url) },
                                 )
+                                BackupSettingsBlock(
+                                    message = settingsBackupMessage,
+                                    onExport = { exportSettings.launch("mp3tag-settings.json") },
+                                    onImport = {
+                                        importSettings.launch(arrayOf("application/json", "text/plain"))
+                                    },
+                                )
                                 DeveloperAndAboutBlock(
                                     onOpenUrl = { url -> openExternalUrl(context, url) },
+                                    onShowLicenses = { showLicenses = true },
                                 )
                             }
                         }
@@ -328,8 +375,18 @@ fun SettingsScreen(
                         )
                     }
                     item {
+                        BackupSettingsBlock(
+                            message = settingsBackupMessage,
+                            onExport = { exportSettings.launch("mp3tag-settings.json") },
+                            onImport = {
+                                importSettings.launch(arrayOf("application/json", "text/plain"))
+                            },
+                        )
+                    }
+                    item {
                         DeveloperAndAboutBlock(
                             onOpenUrl = { url -> openExternalUrl(context, url) },
+                            onShowLicenses = { showLicenses = true },
                         )
                     }
                 }
@@ -338,6 +395,34 @@ fun SettingsScreen(
                 }
             }
         }
+    }
+
+    if (showLicenses) {
+        AlertDialog(
+            onDismissRequest = { showLicenses = false },
+            title = { Text("Open-source licenses") },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    Text(
+                        "MP3Tag Mobile is MIT-licensed. It bundles an LGPL build of FFmpeg 8 " +
+                            "(with LAME and libopus), and uses JAudioTagger (LGPL) and AndroidX/Compose (Apache 2.0).\n\n" +
+                            "FFmpeg/LAME/libopus are used unmodified as shared libraries. Source code and the " +
+                            "reproducible native build scripts are available in the project repository under native/.\n\n" +
+                            "This is an unofficial fan build and is not affiliated with Mp3tag (mp3tag.de).",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    TextButton(
+                        onClick = {
+                            openExternalUrl(context, UpdateChecker.GITHUB_REPO_URL)
+                        },
+                    ) { Text("Open source repository") }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showLicenses = false }) { Text("Close") }
+            },
+        )
     }
 }
 
@@ -710,6 +795,18 @@ private fun UpdatesSettingsBlock(
                                 text = "Latest ${result.channel.label}: ${release.title}$datePart",
                                 style = MaterialTheme.typography.bodySmall,
                             )
+                            release.releaseNotes?.let { notes ->
+                                Spacer(Modifier.height(6.dp))
+                                Text(
+                                    text = notes.lineSequence()
+                                        .filter { it.isNotBlank() }
+                                        .take(12)
+                                        .joinToString("\n"),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 12,
+                                )
+                            }
                             Spacer(Modifier.height(8.dp))
                             FlowRow(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -744,8 +841,44 @@ private fun UpdatesSettingsBlock(
 }
 
 @Composable
+private fun BackupSettingsBlock(
+    message: String?,
+    onExport: () -> Unit,
+    onImport: () -> Unit,
+) {
+    SectionHeader("Backup & restore")
+    Card(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        Column(Modifier.padding(16.dp)) {
+            Text(
+                "Save settings, saved patterns and conversion defaults to a JSON file, " +
+                    "or restore them on another device.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(10.dp))
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedButton(onClick = onExport) { Text("Export settings") }
+                OutlinedButton(onClick = onImport) { Text("Import settings") }
+            }
+            if (message != null) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    message,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun DeveloperAndAboutBlock(
     onOpenUrl: (String) -> Unit,
+    onShowLicenses: () -> Unit = {},
 ) {
     SectionHeader("Developer")
     Card(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
@@ -858,6 +991,29 @@ private fun DeveloperAndAboutBlock(
                 modifier = Modifier.clickable {
                     onOpenUrl(UpdateChecker.GITHUB_RELEASES_URL)
                 },
+            )
+
+            Spacer(Modifier.height(8.dp))
+
+            ListItem(
+                headlineContent = { Text("Open-source licenses") },
+                supportingContent = {
+                    Text(
+                        "MIT · LGPL FFmpeg/LAME/libopus · Apache 2.0",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                },
+                leadingContent = {
+                    Icon(
+                        Icons.Filled.Info,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                },
+                colors = ListItemDefaults.colors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                ),
+                modifier = Modifier.clickable { onShowLicenses() },
             )
 
             Spacer(Modifier.height(12.dp))

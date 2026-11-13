@@ -158,14 +158,19 @@ internal object DffTagHandler {
                 null
             }
 
+            val multiFields = LinkedHashMap<FieldKey, List<String>>()
             val allFields: Map<FieldKey, String> = if (id3Tag != null) {
                 FieldKey.entries
                     .filter { it != FieldKey.COVER_ART }
                     .mapNotNull { key ->
-                        runCatching { id3Tag.getFirst(key) }.getOrNull()
-                            ?.trim()
-                            ?.takeIf { it.isNotEmpty() }
-                            ?.let { key to it }
+                        val values = runCatching { id3Tag.getAll(key) }.getOrNull()
+                            ?.map { it.trim() }
+                            ?.filter { it.isNotEmpty() }
+                            ?.distinct()
+                            .orEmpty()
+                        if (values.isEmpty()) return@mapNotNull null
+                        if (values.size > 1) multiFields[key] = values
+                        key to values.joinToString(MULTI_VALUE_SEPARATOR)
                     }
                     .toMap()
             } else {
@@ -200,6 +205,7 @@ internal object DffTagHandler {
                 tagDescription = tagDesc,
                 fields = TagEngine.normalizeSplitFieldsInternal(allFields),
                 cover = cover,
+                multiFields = multiFields,
                 fileSizeBytes = fileLen,
             )
         }
@@ -308,6 +314,13 @@ internal object DffTagHandler {
                 runCatching { tag.deleteField(key) }
             } else {
                 tag.setField(key, value)
+            }
+        }
+
+        request.multiFields.forEach { (key, values) ->
+            runCatching { tag.deleteField(key) }
+            values.map { it.trim() }.filter { it.isNotEmpty() }.forEach { value ->
+                runCatching { tag.addField(key, value) }
             }
         }
 

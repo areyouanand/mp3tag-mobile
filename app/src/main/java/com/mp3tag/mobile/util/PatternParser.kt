@@ -113,6 +113,17 @@ object PatternParser {
             .trimEnd('.', ' ')
             .ifBlank { "untitled" }
 
+    /**
+     * Sanitizes a tag-built path that may contain "/" separators, e.g.
+     * `%albumartist%/%album%/%track% %title%`. Empty and `..` segments are dropped.
+     */
+    fun sanitizeRelativePath(name: String): String =
+        name.split('/', '\\')
+            .map { sanitizeFileName(it.trim()) }
+            .filter { it.isNotBlank() && it != "." && it != ".." }
+            .joinToString("/")
+            .ifBlank { "untitled" }
+
     /** Parses tags out of a file name using the given pattern. */
     fun parseFileName(pattern: String, fileName: String): Map<FieldKey, String>? {
         val segments = compile(pattern) ?: return null

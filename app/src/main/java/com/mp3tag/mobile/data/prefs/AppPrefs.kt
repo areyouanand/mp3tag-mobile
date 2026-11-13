@@ -122,6 +122,20 @@ class AppPrefs(context: Context) {
         get() = prefs.getBoolean(KEY_SHOW_HIDDEN_FILES, false)
         set(value) = prefs.edit().putBoolean(KEY_SHOW_HIDDEN_FILES, value).apply()
 
+    /** Browser sort column + direction, persisted across launches. */
+    var browserSortMode: String
+        get() = prefs.getString(KEY_BROWSER_SORT, "NAME") ?: "NAME"
+        set(value) = prefs.edit().putString(KEY_BROWSER_SORT, value).apply()
+
+    var browserSortAscending: Boolean
+        get() = prefs.getBoolean(KEY_BROWSER_SORT_ASC, true)
+        set(value) = prefs.edit().putBoolean(KEY_BROWSER_SORT_ASC, value).apply()
+
+    /** What Paste does when the destination name already exists. */
+    var fileCollisionPolicy: String
+        get() = prefs.getString(KEY_FILE_COLLISION, "KEEP_BOTH") ?: "KEEP_BOTH"
+        set(value) = prefs.edit().putString(KEY_FILE_COLLISION, value).apply()
+
     /** User-defined patterns saved from the tools dialogs, newest first. */
     var savedPatterns: List<String>
         get() = prefs.getString(KEY_SAVED_PATTERNS, null)
@@ -139,6 +153,83 @@ class AppPrefs(context: Context) {
     fun clearSavedPatterns() {
         prefs.edit().remove(KEY_SAVED_PATTERNS).apply()
     }
+
+    // ---------------------------------------------------------------------
+    // Settings backup / restore (JSON)
+    // ---------------------------------------------------------------------
+
+    fun exportSettingsJson(): String {
+        val obj = org.json.JSONObject()
+        obj.put("schema", 1)
+        obj.put("id3Version", id3Version.name)
+        obj.put("themeMode", themeMode.name)
+        obj.put("designLanguage", designLanguage.name)
+        obj.put("performanceMode", performanceMode.name)
+        obj.put("updateChannel", updateChannel.name)
+        obj.put("skipExistingReplayGain", skipExistingReplayGain)
+        obj.put("writeOpusR128ByDefault", writeOpusR128ByDefault)
+        obj.put("showHiddenFiles", showHiddenFiles)
+        obj.put("browserSortMode", browserSortMode)
+        obj.put("browserSortAscending", browserSortAscending)
+        obj.put("fileCollisionPolicy", fileCollisionPolicy)
+        obj.put("savedPatterns", org.json.JSONArray(savedPatterns))
+        obj.put("recentFolders", org.json.JSONArray(recentFolders))
+        obj.put("convertTarget", convertTarget)
+        obj.put("convertBitrate", convertBitrate)
+        obj.put("convertSampleRate", convertSampleRate)
+        obj.put("convertChannels", convertChannels)
+        obj.put("convertBitDepth", convertBitDepth)
+        obj.put("convertKeepTags", convertKeepTags)
+        obj.put("convertDeleteSource", convertDeleteSource)
+        obj.put("convertOutputSubfolder", convertOutputSubfolder)
+        obj.put("convertNamePattern", convertNamePattern)
+        obj.put("convertPreserveTimestamps", convertPreserveTimestamps)
+        obj.put("convertCompressionLevel", convertCompressionLevel)
+        return obj.toString(2)
+    }
+
+    /** Returns true when the JSON looked like a settings backup. */
+    fun importSettingsJson(text: String): Boolean = runCatching {
+        val obj = org.json.JSONObject(text)
+        if (!obj.has("schema")) return@runCatching false
+
+        id3Version = Id3Version.entries.firstOrNull { it.name == obj.optString("id3Version") }
+            ?: Id3Version.V2_3
+        themeMode = ThemeMode.entries.firstOrNull { it.name == obj.optString("themeMode") }
+            ?: ThemeMode.SYSTEM
+        designLanguage = DesignLanguage.entries
+            .firstOrNull { it.name == obj.optString("designLanguage") }
+            ?: DesignLanguage.MATERIAL_3_EXPRESSIVE
+        performanceMode = PerformanceMode.entries
+            .firstOrNull { it.name == obj.optString("performanceMode") }
+            ?: PerformanceMode.AUTO
+        updateChannel = UpdateChannel.entries.firstOrNull { it.name == obj.optString("updateChannel") }
+            ?: UpdateChannel.BETA
+        skipExistingReplayGain = obj.optBoolean("skipExistingReplayGain", false)
+        writeOpusR128ByDefault = obj.optBoolean("writeOpusR128ByDefault", true)
+        showHiddenFiles = obj.optBoolean("showHiddenFiles", false)
+        browserSortMode = obj.optString("browserSortMode", "NAME")
+        browserSortAscending = obj.optBoolean("browserSortAscending", true)
+        fileCollisionPolicy = obj.optString("fileCollisionPolicy", "KEEP_BOTH")
+        obj.optJSONArray("savedPatterns")?.let { array ->
+            savedPatterns = (0 until array.length()).mapNotNull { array.optString(it) }
+        }
+        obj.optJSONArray("recentFolders")?.let { array ->
+            recentFolders = (0 until array.length()).mapNotNull { array.optString(it) }
+        }
+        obj.optString("convertTarget", "").takeIf { it.isNotBlank() }?.let { convertTarget = it }
+        convertBitrate = obj.optInt("convertBitrate", convertBitrate)
+        convertSampleRate = obj.optInt("convertSampleRate", convertSampleRate)
+        convertChannels = obj.optInt("convertChannels", convertChannels)
+        convertBitDepth = obj.optInt("convertBitDepth", convertBitDepth)
+        convertKeepTags = obj.optBoolean("convertKeepTags", true)
+        convertDeleteSource = obj.optBoolean("convertDeleteSource", false)
+        convertOutputSubfolder = obj.optString("convertOutputSubfolder", "")
+        convertNamePattern = obj.optString("convertNamePattern", "")
+        convertPreserveTimestamps = obj.optBoolean("convertPreserveTimestamps", true)
+        convertCompressionLevel = obj.optInt("convertCompressionLevel", 0)
+        true
+    }.getOrDefault(false)
 
     // ---------------------------------------------------------------------
     // Audio conversion defaults (Convert screen)
@@ -172,6 +263,22 @@ class AppPrefs(context: Context) {
         get() = prefs.getBoolean(KEY_CONVERT_DELETE_SOURCE, false)
         set(value) = prefs.edit().putBoolean(KEY_CONVERT_DELETE_SOURCE, value).apply()
 
+    var convertOutputSubfolder: String
+        get() = prefs.getString(KEY_CONVERT_SUBFOLDER, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_CONVERT_SUBFOLDER, value).apply()
+
+    var convertNamePattern: String
+        get() = prefs.getString(KEY_CONVERT_PATTERN, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_CONVERT_PATTERN, value).apply()
+
+    var convertPreserveTimestamps: Boolean
+        get() = prefs.getBoolean(KEY_CONVERT_PRESERVE_TIME, true)
+        set(value) = prefs.edit().putBoolean(KEY_CONVERT_PRESERVE_TIME, value).apply()
+
+    var convertCompressionLevel: Int
+        get() = prefs.getInt(KEY_CONVERT_COMPRESSION, 0)
+        set(value) = prefs.edit().putInt(KEY_CONVERT_COMPRESSION, value).apply()
+
     companion object {
         private const val KEY_ID3_VERSION = "id3_version"
         private const val KEY_THEME = "theme_mode"
@@ -184,6 +291,9 @@ class AppPrefs(context: Context) {
         private const val KEY_LAST_FOLDER = "last_folder"
         private const val KEY_LAST_FM_FOLDER = "last_fm_folder"
         private const val KEY_SHOW_HIDDEN_FILES = "show_hidden_files"
+        private const val KEY_BROWSER_SORT = "browser_sort_mode"
+        private const val KEY_BROWSER_SORT_ASC = "browser_sort_ascending"
+        private const val KEY_FILE_COLLISION = "file_collision_policy"
         private const val KEY_SAVED_PATTERNS = "saved_patterns"
         private const val KEY_CONVERT_TARGET = "convert_target"
         private const val KEY_CONVERT_BITRATE = "convert_bitrate"
@@ -192,6 +302,10 @@ class AppPrefs(context: Context) {
         private const val KEY_CONVERT_BIT_DEPTH = "convert_bit_depth"
         private const val KEY_CONVERT_KEEP_TAGS = "convert_keep_tags"
         private const val KEY_CONVERT_DELETE_SOURCE = "convert_delete_source"
+        private const val KEY_CONVERT_SUBFOLDER = "convert_output_subfolder"
+        private const val KEY_CONVERT_PATTERN = "convert_name_pattern"
+        private const val KEY_CONVERT_PRESERVE_TIME = "convert_preserve_timestamps"
+        private const val KEY_CONVERT_COMPRESSION = "convert_compression_level"
         private const val RECENT_SEPARATOR = "\u0001"
         private const val MAX_RECENTS = 8
         private const val MAX_SAVED_PATTERNS = 12

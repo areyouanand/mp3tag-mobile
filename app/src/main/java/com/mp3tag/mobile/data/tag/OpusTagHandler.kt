@@ -165,14 +165,19 @@ internal object OpusTagHandler {
                 null
             }
 
+            val multiFields = LinkedHashMap<FieldKey, List<String>>()
             val allFields: Map<FieldKey, String> = if (vorbisTag != null) {
                 FieldKey.entries
                     .filter { it != FieldKey.COVER_ART }
                     .mapNotNull { key ->
-                        runCatching { vorbisTag.getFirst(key) }.getOrNull()
-                            ?.trim()
-                            ?.takeIf { it.isNotEmpty() }
-                            ?.let { key to it }
+                        val values = runCatching { vorbisTag.getAll(key) }.getOrNull()
+                            ?.map { it.trim() }
+                            ?.filter { it.isNotEmpty() }
+                            ?.distinct()
+                            .orEmpty()
+                        if (values.isEmpty()) return@mapNotNull null
+                        if (values.size > 1) multiFields[key] = values
+                        key to values.joinToString(MULTI_VALUE_SEPARATOR)
                     }
                     .toMap()
             } else {
@@ -200,6 +205,7 @@ internal object OpusTagHandler {
                 fields = TagEngine.normalizeSplitFieldsInternal(allFields),
                 cover = cover,
                 fileSizeBytes = fileLen,
+                multiFields = multiFields,
             )
         }
     }
@@ -267,6 +273,14 @@ internal object OpusTagHandler {
                 runCatching { existingVorbisTag.deleteField(key) }
             } else {
                 existingVorbisTag.setField(key, value)
+            }
+        }
+
+        // OpusTags is VorbisComment, so it can hold several ARTIST/GENRE entries.
+        request.multiFields.forEach { (key, values) ->
+            runCatching { existingVorbisTag.deleteField(key) }
+            values.map { it.trim() }.filter { it.isNotEmpty() }.forEach { value ->
+                runCatching { existingVorbisTag.addField(key, value) }
             }
         }
         request.customFields.forEach { (key, value) ->

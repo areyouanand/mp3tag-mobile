@@ -137,6 +137,7 @@ fun FileManagerScreen(
     var filter by rememberSaveable { mutableStateOf("") }
     var menuSheetOpen by rememberSaveable { mutableStateOf(false) }
     var sortSheetOpen by rememberSaveable { mutableStateOf(false) }
+    var collisionSheetOpen by rememberSaveable { mutableStateOf(false) }
     var storageDialogOpen by rememberSaveable { mutableStateOf(false) }
     var newFolderDialogOpen by rememberSaveable { mutableStateOf(false) }
 
@@ -461,6 +462,10 @@ fun FileManagerScreen(
                                 text = state.busyMessage ?: "Working…",
                                 style = MaterialTheme.typography.bodyMedium,
                             )
+                            if (state.busyCancellable) {
+                                Spacer(Modifier.height(6.dp))
+                                TextButton(onClick = viewModel::cancelOperation) { Text("Cancel") }
+                            }
                         }
                     }
                 }
@@ -540,6 +545,15 @@ fun FileManagerScreen(
                     modifier = Modifier.clickable {
                         menuSheetOpen = false
                         sortSheetOpen = true
+                    },
+                )
+                ListItem(
+                    headlineContent = { Text("Paste conflict policy…") },
+                    supportingContent = { Text(state.collisionPolicy.label) },
+                    leadingContent = { Icon(Icons.Filled.ContentCopy, contentDescription = null) },
+                    modifier = Modifier.clickable {
+                        menuSheetOpen = false
+                        collisionSheetOpen = true
                     },
                 )
                 ListItem(
@@ -656,6 +670,40 @@ fun FileManagerScreen(
         }
     }
 
+    if (collisionSheetOpen) {
+        ModalBottomSheet(onDismissRequest = { collisionSheetOpen = false }) {
+            Column(
+                modifier = Modifier
+                    .padding(horizontal = 8.dp)
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                Text(
+                    text = "When a name already exists",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                )
+                CollisionPolicy.entries.forEach { policy ->
+                    ListItem(
+                        headlineContent = { Text(policy.label) },
+                        leadingContent = {
+                            RadioButton(
+                                selected = state.collisionPolicy == policy,
+                                onClick = null,
+                            )
+                        },
+                        modifier = Modifier.clickable {
+                            viewModel.setCollisionPolicy(policy)
+                            collisionSheetOpen = false
+                        },
+                    )
+                }
+                Spacer(Modifier.navigationBarsPadding())
+                Spacer(Modifier.height(36.dp))
+            }
+        }
+    }
+
     // Single-item action sheet (on long-press or file tap)
     val activeContextEntry = remember(contextEntryPath, state.entries) {
         contextEntryPath?.let { path -> state.entries.firstOrNull { it.path == path } }
@@ -764,8 +812,17 @@ fun FileManagerScreen(
                     },
                 )
                 ListItem(
+                    headlineContent = { Text("Move to trash") },
+                    leadingContent = { Icon(Icons.Filled.Delete, contentDescription = null) },
+                    modifier = Modifier.clickable {
+                        val path = activeContextEntry.path
+                        contextEntryPath = null
+                        viewModel.trashPaths(listOf(path))
+                    },
+                )
+                ListItem(
                     headlineContent = {
-                        Text("Delete…", color = MaterialTheme.colorScheme.error)
+                        Text("Delete permanently…", color = MaterialTheme.colorScheme.error)
                     },
                     leadingContent = {
                         Icon(
@@ -929,6 +986,7 @@ fun FileManagerScreen(
                     }
                     DetailLine("Modified", info.lastModifiedText)
                     DetailLine("Access", info.permissionsText)
+                    info.sha256?.let { DetailLine("SHA-256", it) }
                 }
             },
             confirmButton = {

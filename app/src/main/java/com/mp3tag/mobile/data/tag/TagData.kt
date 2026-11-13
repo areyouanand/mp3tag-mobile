@@ -47,6 +47,12 @@ data class TagSnapshot(
     val fields: Map<FieldKey, String>,
     val cover: CoverImage?,
     val fileSizeBytes: Long,
+    /**
+     * Fields stored as multiple values in the container (e.g. two ARTIST comments).
+     * [fields] carries the same data joined with "; " for the single-line editor;
+     * this map is what conversion/writes use to preserve the separate values.
+     */
+    val multiFields: Map<FieldKey, List<String>> = emptyMap(),
 )
 
 data class WriteOptions(
@@ -61,10 +67,27 @@ enum class CoverAction { NONE, REPLACE, REMOVE }
  */
 data class WriteRequest(
     val fieldValues: Map<FieldKey, String?> = emptyMap(),
+    /** Separate values for multi-value tags (ARTIST, GENRE, COMPOSER, ...). */
+    val multiFields: Map<FieldKey, List<String>> = emptyMap(),
     val customFields: Map<String, String> = emptyMap(),
     val coverAction: CoverAction = CoverAction.NONE,
     val newCover: CoverImage? = null,
 )
+
+/** Fields commonly stored as several values (MP3Tag shows them joined with "; "). */
+val MULTI_VALUE_FIELDS: Set<FieldKey> = setOf(
+    FieldKey.ARTIST,
+    FieldKey.ALBUM_ARTIST,
+    FieldKey.GENRE,
+    FieldKey.COMPOSER,
+    FieldKey.PERFORMER,
+)
+
+/** Separator used by the single-line editor for [MULTI_VALUE_FIELDS]. */
+const val MULTI_VALUE_SEPARATOR = "; "
+
+fun splitMultiValue(value: String): List<String> =
+    value.split(';').map { it.trim() }.filter { it.isNotEmpty() }.distinct()
 
 /** The fields always shown in the editor, in display order. */
 val EDITABLE_FIELDS: List<FieldKey> = listOf(

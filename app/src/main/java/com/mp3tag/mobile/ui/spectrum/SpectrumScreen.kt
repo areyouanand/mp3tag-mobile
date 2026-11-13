@@ -19,11 +19,15 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -49,7 +53,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -76,6 +82,17 @@ fun SpectrumScreen(
 ) {
     val state by viewModel.state.collectAsState()
     var browsingFiles by rememberSaveable { mutableStateOf(initialFilePath == null) }
+    val context = LocalContext.current
+    val exportPng = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("image/png")) { uri ->
+        val image = state.spectrogram
+        if (uri != null && image != null) {
+            runCatching {
+                context.contentResolver.openOutputStream(uri)?.use { stream ->
+                    image.asAndroidBitmap().compress(android.graphics.Bitmap.CompressFormat.PNG, 100, stream)
+                }
+            }
+        }
+    }
 
     LaunchedEffect(initialFilePath) {
         if (initialFilePath != null && state.filePath != initialFilePath) {
@@ -119,6 +136,12 @@ fun SpectrumScreen(
                     }
                 },
                 actions = {
+                    IconButton(
+                        onClick = { exportPng.launch("spectrogram-${state.fileName ?: "audio"}.png") },
+                        enabled = state.spectrogram != null,
+                    ) {
+                        Icon(Icons.Filled.Download, contentDescription = "Export spectrogram as PNG")
+                    }
                     IconButton(onClick = launchPicker, enabled = !state.loading) {
                         Icon(Icons.Filled.FolderOpen, contentDescription = "Choose audio file")
                     }
@@ -179,6 +202,27 @@ fun SpectrumScreen(
                         }
                     }
 
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(
+                            "Window",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.align(Alignment.CenterVertically),
+                        )
+                        listOf(15.0, 30.0, 60.0).forEach { seconds ->
+                            AssistChip(
+                                onClick = {
+                                    state.filePath?.let { viewModel.analyze(it, seconds) }
+                                },
+                                enabled = !state.loading && state.filePath != null,
+                                label = { Text("${seconds.toInt()} s") },
+                            )
+                        }
+                    }
+
                     when {
                         state.loading -> Card(modifier = Modifier.fillMaxWidth()) {
                             Row(
@@ -208,6 +252,7 @@ fun SpectrumScreen(
                         state.report != null && state.spectrogram != null -> ReportContent(
                             report = state.report!!,
                             spectrogram = state.spectrogram!!,
+                            diagnostics = state.diagnostics,
                         )
                     }
 
@@ -231,8 +276,24 @@ fun SpectrumScreen(
 private fun ReportContent(
     report: SpectrumReport,
     spectrogram: androidx.compose.ui.graphics.ImageBitmap,
+    diagnostics: List<String> = emptyList(),
 ) {
     SummaryCard(report)
+
+    if (diagnostics.isNotEmpty()) {
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("Signal health", style = MaterialTheme.typography.titleSmall)
+                diagnostics.forEach { line ->
+                    Text(
+                        line,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+    }
 
     SectionTitle("Spectrogram")
     Card(modifier = Modifier.fillMaxWidth()) {

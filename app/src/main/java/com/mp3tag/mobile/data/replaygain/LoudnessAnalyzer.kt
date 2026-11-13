@@ -10,17 +10,33 @@ import com.mp3tag.mobile.data.audio.FfmpegPcmReader
 import java.io.File
 import kotlin.math.abs
 import kotlin.math.log10
+import kotlin.math.min
+import kotlin.math.tan
 
 data class TrackLoudness(
     val path: String,
-    val lufs: Double,        // integrated loudness (approx)
-    val peakDb: Double,     // true peak in dBFS
-    val gainDb: Double,     // track gain to reach target
+    val lufs: Double,        // integrated loudness (BS.1770-4, gated)
+    val peakDb: Double,      // true peak in dBFS (4x oversampled)
+    val gainDb: Double,      // clip-safe track gain to reach the target
+    /** True when the ideal gain had to be reduced to avoid clipping. */
+    val clipLimited: Boolean = false,
+    /** 400 ms gated block powers, used to compute a proper album gain. */
+    val blockPowers: DoubleArray = DoubleArray(0),
+)
+
+data class AlbumLoudness(
+    val lufs: Double,
+    val peakDb: Double,
+    val gainDb: Double,
+    val clipLimited: Boolean = false,
 )
 
 object LoudnessAnalyzer {
     /** Target integrated loudness in LUFS. ReplayGain classic ~89 dB ≈ -18 LUFS. */
     const val TARGET_LUFS = -18.0
+
+    /** Peak headroom kept when capping positive gain. */
+    private const val PEAK_CEILING_DB = -0.1
 
     private const val READ_CHUNK = 1 shl 16
 
@@ -42,26 +58,12 @@ object LoudnessAnalyzer {
     private fun analyzeWithFfmpeg(file: File): TrackLoudness? {
         val reader = FfmpegPcmReader.open(file, 0.0) ?: return null
         return reader.use {
-            var hpPrev = 0.0
-            var hpOut = 0.0
-            var sumSq = 0.0
-            var count = 0L
-            var peak = 0.0
-
+            val meter = Meter(reader.sampleRate)
             while (true) {
                 val chunk = reader.read(READ_CHUNK) ?: break
-                for (sample in chunk) {
-                    val mono = sample.toDouble()
-                    hpOut = mono - hpPrev + 0.995 * hpOut
-                    hpPrev = mono
-                    val weighted = hpOut * 1.5
-                    sumSq += weighted * weighted
-                    count++
-                    val amplitude = abs(mono)
-                    if (amplitude > peak) peak = amplitude
-                }
+                for (sample in chunk) meter.add(sample.toDouble())
             }
-            build(file, sumSq, count, peak)
+            meter.finish(file)
         }
     }
 
@@ -90,12 +92,8 @@ object LoudnessAnalyzer {
 
             var channels = format.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
             var encoding = AudioFormat.ENCODING_PCM_16BIT
-
-            var hpPrev = 0.0
-            var hpOut = 0.0
-            var sumSq = 0.0
-            var count = 0L
-            var peak = 0.0
+            var sampleRate = format.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+            var meter = Meter(sampleRate)
 
             val info = MediaCodec.BufferInfo()
             var inputDone = false
@@ -127,6 +125,11 @@ object LoudnessAnalyzer {
                         } else {
                             AudioFormat.ENCODING_PCM_16BIT
                         }
+                        val newRate = out.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+                        if (newRate != sampleRate) {
+                            sampleRate = newRate
+                            meter = Meter(sampleRate)
+                        }
                     }
                     MediaCodec.INFO_TRY_AGAIN_LATER, MediaCodec.INFO_OUTPUT_BUFFERS_CHANGED -> Unit
                     else -> if (outIndex >= 0) {
@@ -147,14 +150,7 @@ object LoudnessAnalyzer {
                                 for (ch in 0 until channels.coerceAtLeast(1)) {
                                     sum += readSample(bb, encoding)
                                 }
-                                val mono = sum / channels.coerceAtLeast(1)
-                                hpOut = mono - hpPrev + 0.995 * hpOut
-                                hpPrev = mono
-                                val weighted = hpOut * 1.5
-                                sumSq += weighted * weighted
-                                count++
-                                val amplitude = abs(mono)
-                                if (amplitude > peak) peak = amplitude
+                                meter.add(sum / channels.coerceAtLeast(1))
                             }
                         }
                         codec.releaseOutputBuffer(outIndex, false)
@@ -166,18 +162,186 @@ object LoudnessAnalyzer {
             codec.release()
             extractor.release()
 
-            build(file, sumSq, count, peak)
+            meter.finish(file)
         } catch (_: Exception) {
             null
         }
     }
 
-    private fun build(file: File, sumSq: Double, count: Long, peak: Double): TrackLoudness? {
-        if (count == 0L) return null
-        val meanSq = sumSq / count
-        val lufs = -0.691 + 10.0 * log10(meanSq.coerceAtLeast(1e-12))
-        val peakDb = 20.0 * log10(peak.coerceAtLeast(1e-12))
-        return TrackLoudness(file.absolutePath, lufs, peakDb, TARGET_LUFS - lufs)
+    // ------------------------------------------------------------------
+    // BS.1770-4 loudness meter
+    // ------------------------------------------------------------------
+
+    /**
+     * ITU-R BS.1770-4: K-weighting (high shelf + RLB high-pass), 400 ms blocks with
+     * 75 % overlap, -70 LUFS absolute gate and a -10 LU relative gate. True peak is
+     * estimated with 4x linear oversampling (mono downmix).
+     */
+    private class Meter(private val sampleRate: Int) {
+        private val hop = (sampleRate / 10).coerceAtLeast(1)
+        private val blockLen = hop * 4
+        private val pre = Biquad.highShelf(sampleRate)
+        private val rlb = Biquad.highPass(sampleRate)
+
+        private val blocks = ArrayList<Double>()
+        private val hopCums = ArrayDeque<Double>()
+        private var cumulative = 0.0
+        private var processed = 0
+
+        private var peak = 0.0
+        private var prev = 0.0
+        private var hasPrev = false
+
+        fun add(sample: Double) {
+            val weighted = rlb.process(pre.process(sample))
+            cumulative += weighted * weighted
+            processed++
+
+            // True-peak approximation: 4 points per input interval.
+            if (hasPrev) {
+                val delta = sample - prev
+                for (k in 1..3) {
+                    val interpolated = abs(prev + delta * (k / 4.0))
+                    if (interpolated > peak) peak = interpolated
+                }
+            }
+            val amplitude = abs(sample)
+            if (amplitude > peak) peak = amplitude
+            prev = sample
+            hasPrev = true
+
+            if (processed % hop == 0) {
+                hopCums.addLast(cumulative)
+                while (hopCums.size > 4) hopCums.removeFirst()
+                if (hopCums.size == 4) {
+                    val before = hopCums.first()
+                    blocks.add((cumulative - before) / blockLen)
+                }
+            }
+        }
+
+        fun finish(file: File): TrackLoudness? {
+            if (blocks.isEmpty() && processed > 0) {
+                // Very short files (<400 ms) never complete a gating block.
+                blocks.add(cumulative / processed)
+            }
+            if (blocks.isEmpty()) return null
+            val powers = blocks.toDoubleArray()
+            val lufs = integratedLufs(powers)
+            if (!lufs.isFinite()) return null
+            val peakDb = 20.0 * log10(peak.coerceAtLeast(1e-12))
+            val ideal = TARGET_LUFS - lufs
+            val clipSafe = PEAK_CEILING_DB - peakDb
+            val gain = min(ideal, clipSafe)
+            return TrackLoudness(
+                path = file.absolutePath,
+                lufs = lufs,
+                peakDb = peakDb,
+                gainDb = gain,
+                clipLimited = ideal > clipSafe + 0.01,
+                blockPowers = powers,
+            )
+        }
+    }
+
+    /** Proper album loudness: gated across all tracks, peak-safe gain. */
+    fun albumMetrics(tracks: List<TrackLoudness>): AlbumLoudness? {
+        if (tracks.isEmpty()) return null
+        val powers = tracks.flatMap { it.blockPowers.toList() }.toDoubleArray()
+        val lufs = if (powers.isNotEmpty()) {
+            integratedLufs(powers)
+        } else {
+            tracks.map { it.lufs }.average()
+        }
+        if (!lufs.isFinite()) return null
+        val peakDb = tracks.maxOf { it.peakDb }
+        val ideal = TARGET_LUFS - lufs
+        val clipSafe = PEAK_CEILING_DB - peakDb
+        return AlbumLoudness(
+            lufs = lufs,
+            peakDb = peakDb,
+            gainDb = min(ideal, clipSafe),
+            clipLimited = ideal > clipSafe + 0.01,
+        )
+    }
+
+    private fun integratedLufs(blockPowers: DoubleArray): Double {
+        if (blockPowers.isEmpty()) return Double.NEGATIVE_INFINITY
+        val absolute = blockPowers.filter { loudnessOf(it) > -70.0 }
+        // Fully silent material: report the gate floor instead of -Infinity so the
+        // file still gets a (clip-limited) gain and the UI can show a result.
+        if (absolute.isEmpty()) return -70.0
+        val absoluteMean = absolute.average()
+        val relativeGate = loudnessOf(absoluteMean) - 10.0
+        val gated = absolute.filter { loudnessOf(it) > relativeGate }
+        val finalBlocks = if (gated.isEmpty()) absolute else gated
+        return loudnessOf(finalBlocks.average())
+    }
+
+    private fun loudnessOf(meanSquare: Double): Double =
+        -0.691 + 10.0 * log10(meanSquare.coerceAtLeast(1e-12))
+
+    /**
+     * Direct-form biquad. Coefficients follow the reference BS.1770 implementation
+     * (libebur128/pyloudnorm) and are recomputed for the file's sample rate.
+     */
+    private class Biquad(
+        private val b0: Double,
+        private val b1: Double,
+        private val b2: Double,
+        private val a1: Double,
+        private val a2: Double,
+    ) {
+        private var x1 = 0.0
+        private var x2 = 0.0
+        private var y1 = 0.0
+        private var y2 = 0.0
+
+        fun process(x: Double): Double {
+            val y = b0 * x + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2
+            x2 = x1
+            x1 = x
+            y2 = y1
+            y1 = y
+            return y
+        }
+
+        companion object {
+            private const val PI = Math.PI
+
+            /** K-weighting stage 1: high shelf (+4 dB above ~1.7 kHz). */
+            fun highShelf(fs: Int): Biquad {
+                val f0 = 1681.9744509555319
+                val gainDb = 3.99984385397
+                val q = 0.7071752369554193
+                val k = tan(PI * f0 / fs)
+                val vh = Math.pow(10.0, gainDb / 20.0)
+                val vb = Math.pow(vh, 0.4996667741545416)
+                val a0 = 1.0 + k / q + k * k
+                return Biquad(
+                    b0 = (vh + vb * k / q + k * k) / a0,
+                    b1 = 2.0 * (k * k - vh) / a0,
+                    b2 = (vh - vb * k / q + k * k) / a0,
+                    a1 = 2.0 * (k * k - 1.0) / a0,
+                    a2 = (1.0 - k / q + k * k) / a0,
+                )
+            }
+
+            /** K-weighting stage 2: RLB high-pass (~38 Hz). */
+            fun highPass(fs: Int): Biquad {
+                val f0 = 38.13547087602444
+                val q = 0.5003270373238773
+                val k = tan(PI * f0 / fs)
+                val a0 = 1.0 + k / q + k * k
+                return Biquad(
+                    b0 = 1.0 / a0,
+                    b1 = -2.0 / a0,
+                    b2 = 1.0 / a0,
+                    a1 = 2.0 * (k * k - 1.0) / a0,
+                    a2 = (1.0 - k / q + k * k) / a0,
+                )
+            }
+        }
     }
 
     private fun readSample(bb: java.nio.ByteBuffer, encoding: Int): Double = when (encoding) {

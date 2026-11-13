@@ -115,6 +115,35 @@ class ConversionOptionsTest {
     }
 
     @Test
+    fun `output subfolder is created and used`() {
+        val dir = Files.createTempDirectory("convert-test").toFile()
+        try {
+            val source = File(dir, "track.wav").apply { writeText("x") }
+            val out = AudioConverter.outputFileFor(
+                source,
+                ConvertSettings(target = ConvertTarget.FLAC, outputSubfolder = "Converted"),
+            )
+            assertEquals("Converted", out.parentFile!!.name)
+            assertEquals("track.flac", out.name)
+            assertTrue(out.parentFile!!.isDirectory)
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `path traversal in the subfolder is removed`() {
+        val normalized = ConvertSettings(outputSubfolder = "../../etc").normalized()
+        assertEquals("etc", normalized.outputSubfolder)
+    }
+
+    @Test
+    fun `compression override wins over the target default`() {
+        assertEquals(8, ConvertTarget.FLAC.qualityFor())
+        assertEquals(3, ConvertTarget.FLAC.qualityFor(3))
+    }
+
+    @Test
     fun `overall progress covers the whole batch`() {
         assertEquals(0, ConversionProgress(0, 4, "a", 0).overallPercent)
         assertEquals(50, ConversionProgress(2, 4, "c", 0).overallPercent)

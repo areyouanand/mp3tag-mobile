@@ -50,6 +50,10 @@ class ConvertViewModel(application: Application) : AndroidViewModel(application)
             bitDepth = prefs.convertBitDepth,
             keepTagsAndCover = prefs.convertKeepTags,
             deleteSourceAfterSuccess = prefs.convertDeleteSource,
+            outputSubfolder = prefs.convertOutputSubfolder,
+            namePattern = prefs.convertNamePattern,
+            preserveTimestamps = prefs.convertPreserveTimestamps,
+            compressionLevel = prefs.convertCompressionLevel,
         ).normalized()
     }
 
@@ -63,6 +67,10 @@ class ConvertViewModel(application: Application) : AndroidViewModel(application)
         prefs.convertBitDepth = normalized.bitDepth
         prefs.convertKeepTags = normalized.keepTagsAndCover
         prefs.convertDeleteSource = normalized.deleteSourceAfterSuccess
+        prefs.convertOutputSubfolder = normalized.outputSubfolder
+        prefs.convertNamePattern = normalized.namePattern
+        prefs.convertPreserveTimestamps = normalized.preserveTimestamps
+        prefs.convertCompressionLevel = normalized.compressionLevel
     }
 
     fun start(paths: List<String>) {

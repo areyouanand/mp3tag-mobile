@@ -38,6 +38,12 @@ enum class ClipboardMode(val label: String) {
     MOVE("Move"),
 }
 
+enum class CollisionPolicy(val label: String) {
+    KEEP_BOTH("Keep both (rename)"),
+    OVERWRITE("Overwrite existing"),
+    SKIP("Skip existing"),
+}
+
 data class FileClipboard(
     val sourcePaths: List<String>,
     val mode: ClipboardMode,
@@ -64,6 +70,7 @@ data class FileDetailsInfo(
     val name: String,
     val lastModifiedText: String,
     val permissionsText: String,
+    val sha256: String? = null,
 )
 
 data class FileManagerState(
@@ -81,17 +88,22 @@ data class FileManagerState(
     val recents: List<String> = emptyList(),
     val volumes: List<StorageVolumeInfo> = emptyList(),
     val detailsInfo: FileDetailsInfo? = null,
+    val collisionPolicy: CollisionPolicy = CollisionPolicy.KEEP_BOTH,
+    val busyCancellable: Boolean = false,
 )
 
 class FileManagerViewModel(application: Application) : AndroidViewModel(application) {
 
     private val prefs = AppPrefs(application)
     private var loadJob: Job? = null
+    @Volatile private var cancelRequested = false
 
     private val _state = MutableStateFlow(
         FileManagerState(
             showHidden = prefs.showHiddenFiles,
             recents = prefs.recentFolders,
+            collisionPolicy = runCatching { CollisionPolicy.valueOf(prefs.fileCollisionPolicy) }
+                .getOrDefault(CollisionPolicy.KEEP_BOTH),
         )
     )
     val state: StateFlow<FileManagerState> = _state.asStateFlow()
@@ -198,6 +210,17 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
 
     fun clearSelection() = _state.update { it.copy(selectedPaths = emptySet()) }
 
+    fun setCollisionPolicy(policy: CollisionPolicy) {
+        prefs.fileCollisionPolicy = policy.name
+        _state.update { it.copy(collisionPolicy = policy) }
+    }
+
+    /** Requests cancellation of the running copy/move/delete batch. */
+    fun cancelOperation() {
+        cancelRequested = true
+        _state.update { it.copy(statusMessage = "Cancelling…") }
+    }
+
     fun setSorting(field: FileSortField, ascending: Boolean) {
         _state.update { it.copy(sortField = field, sortAscending = ascending) }
         resortCurrentEntries()
@@ -252,20 +275,45 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
         val clip = _state.value.clipboard ?: return
         val destDir = _state.value.directory
         if (_state.value.busyMessage != null) return
+        cancelRequested = false
 
         viewModelScope.launch {
             val total = clip.sourcePaths.size
             val verb = if (clip.mode == ClipboardMode.COPY) "Copying" else "Moving"
-            _state.update { it.copy(busyMessage = "$verb 0 / $total item(s)…") }
+            val policy = _state.value.collisionPolicy
+
+            // Refuse to start a copy that cannot fit on the destination volume.
+            if (clip.mode == ClipboardMode.COPY) {
+                val needed = withContext(Dispatchers.IO) {
+                    clip.sourcePaths.sumOf { treeSize(File(it)) }
+                }
+                val free = destDir.usableSpace
+                if (free in 1 until needed) {
+                    _state.update {
+                        it.copy(
+                            statusMessage = "Not enough space: needs ${Format.fileSize(needed)}, " +
+                                "${Format.fileSize(free)} free",
+                        )
+                    }
+                    return@launch
+                }
+            }
+
+            _state.update {
+                it.copy(busyMessage = "$verb 0 / $total item(s)…", busyCancellable = true)
+            }
 
             var okCount = 0
+            var skipCount = 0
             var failCount = 0
             var lastError: String? = null
 
             withContext(Dispatchers.IO) {
-                clip.sourcePaths.forEachIndexed { index, srcPath ->
+                for ((index, srcPath) in clip.sourcePaths.withIndex()) {
+                    if (cancelRequested) break
                     _state.update { it.copy(busyMessage = "$verb ${index + 1} / $total: ${File(srcPath).name}") }
                     val src = File(srcPath)
+                    var skipped = false
                     val res = runCatching {
                         if (!src.exists()) error("Source no longer exists: ${src.name}")
                         if (src.isDirectory) {
@@ -279,13 +327,32 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
                             // Moving into the exact same folder is a no-op
                             return@runCatching
                         }
-                        val target = resolveNonCollidingTarget(destDir, src.name, src.isDirectory)
+                        val target = resolvePasteTarget(destDir, src.name, src.isDirectory, policy)
+                        if (target == null) {
+                            skipped = true
+                            return@runCatching
+                        }
                         when (clip.mode) {
-                            ClipboardMode.COPY -> copyFileOrDir(src, target)
+                            ClipboardMode.COPY -> {
+                                val progress = CopyProgress(treeSize(src))
+                                copyFileOrDir(src, target, progress) { copied, totalBytes ->
+                                    if (totalBytes > 0 && copied % (8L * 1024 * 1024) < 64L * 1024) {
+                                        val pct = (copied * 100 / totalBytes).toInt()
+                                        _state.update {
+                                            it.copy(
+                                                busyMessage =
+                                                    "$verb ${index + 1} / $total: ${src.name} ($pct%)",
+                                            )
+                                        }
+                                    }
+                                }
+                            }
                             ClipboardMode.MOVE -> moveFileOrDir(src, target)
                         }
                     }
-                    if (res.isSuccess) {
+                    if (res.isSuccess && skipped) {
+                        skipCount += 1
+                    } else if (res.isSuccess) {
                         okCount += 1
                     } else {
                         failCount += 1
@@ -295,16 +362,19 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
             }
 
             val doneVerb = if (clip.mode == ClipboardMode.COPY) "Copied" else "Moved"
-            val summary = if (failCount == 0) {
-                "$doneVerb $okCount item(s)"
-            } else {
-                "$doneVerb $okCount of $total item(s) ($failCount failed${lastError?.let { ": $it" }.orEmpty()})"
+            val cancelled = cancelRequested
+            val summary = buildString {
+                if (cancelled) append("Cancelled — ")
+                append("$doneVerb $okCount of $total item(s)")
+                if (skipCount > 0) append(", skipped $skipCount")
+                if (failCount > 0) append(", $failCount failed${lastError?.let { ": $it" }.orEmpty()}")
             }
 
             _state.update {
                 it.copy(
                     busyMessage = null,
-                    clipboard = if (clip.mode == ClipboardMode.MOVE && failCount == 0) null else it.clipboard,
+                    busyCancellable = false,
+                    clipboard = if (clip.mode == ClipboardMode.MOVE && failCount == 0 && !cancelled) null else it.clipboard,
                     statusMessage = summary,
                 )
             }
@@ -371,13 +441,15 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
 
     fun deletePaths(paths: Collection<String>) {
         if (paths.isEmpty() || _state.value.busyMessage != null) return
+        cancelRequested = false
         val targets = paths.toList()
         viewModelScope.launch {
-            _state.update { it.copy(busyMessage = "Deleting ${targets.size} item(s)…") }
+            _state.update { it.copy(busyMessage = "Deleting ${targets.size} item(s)…", busyCancellable = true) }
             var deleted = 0
             var failed = 0
             withContext(Dispatchers.IO) {
                 targets.forEachIndexed { idx, path ->
+                    if (cancelRequested) return@forEachIndexed
                     _state.update { it.copy(busyMessage = "Deleting ${idx + 1} / ${targets.size}…") }
                     val file = File(path)
                     val ok = runCatching { file.deleteRecursively() }.getOrDefault(false)
@@ -387,11 +459,59 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
             _state.update {
                 it.copy(
                     busyMessage = null,
+                    busyCancellable = false,
                     selectedPaths = emptySet(),
                     statusMessage = if (failed == 0) {
-                        "Deleted $deleted item(s)"
+                        if (cancelRequested) "Cancelled — deleted $deleted item(s)" else "Deleted $deleted item(s)"
                     } else {
                         "Deleted $deleted of ${targets.size} item(s) ($failed failed)"
+                    },
+                )
+            }
+            refresh()
+        }
+    }
+
+    /**
+     * Moves items into a hidden `.mp3tag-trash` folder next to them. Nothing is
+     * permanently removed, so a mistaken delete can still be recovered with a
+     * file manager.
+     */
+    fun trashPaths(paths: Collection<String>) {
+        if (paths.isEmpty() || _state.value.busyMessage != null) return
+        cancelRequested = false
+        val targets = paths.toList()
+        viewModelScope.launch {
+            _state.update { it.copy(busyMessage = "Moving to trash…", busyCancellable = true) }
+            var moved = 0
+            var failed = 0
+            withContext(Dispatchers.IO) {
+                targets.forEachIndexed { idx, path ->
+                    if (cancelRequested) return@forEachIndexed
+                    _state.update { it.copy(busyMessage = "Moving to trash ${idx + 1} / ${targets.size}…") }
+                    val src = File(path)
+                    val ok = runCatching {
+                        val parent = src.parentFile ?: error("No parent folder")
+                        val trash = File(parent, ".mp3tag-trash")
+                        if (!trash.exists() && !trash.mkdirs()) error("Could not create trash folder")
+                        val target = resolveNonCollidingTarget(trash, src.name, src.isDirectory)
+                        if (!src.renameTo(target)) {
+                            copyFileOrDir(src, target)
+                            if (!src.deleteRecursively()) error("Copied, but could not remove original")
+                        }
+                    }.isSuccess
+                    if (ok) moved += 1 else failed += 1
+                }
+            }
+            _state.update {
+                it.copy(
+                    busyMessage = null,
+                    busyCancellable = false,
+                    selectedPaths = emptySet(),
+                    statusMessage = if (failed == 0) {
+                        "Moved $moved item(s) to .mp3tag-trash"
+                    } else {
+                        "Moved $moved of ${targets.size} item(s) to trash ($failed failed)"
                     },
                 )
             }
@@ -442,6 +562,11 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
                             "Unknown"
                         },
                         permissionsText = perms,
+                        sha256 = if (single.isFile && single.length() in 1..(256L * 1024 * 1024)) {
+                            runCatching { sha256(single) }.getOrNull()
+                        } else {
+                            null
+                        },
                     )
                 } else {
                     val parentPath = File(list.first()).parent ?: ""
@@ -545,6 +670,52 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
+    private data class CopyProgress(val totalBytes: Long) {
+        var copiedBytes: Long = 0L
+    }
+
+    private fun sha256(file: File): String {
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+        FileInputStream(file).use { input ->
+            val buffer = ByteArray(256 * 1024)
+            while (true) {
+                val read = input.read(buffer)
+                if (read <= 0) break
+                digest.update(buffer, 0, read)
+            }
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) }
+    }
+
+    private fun treeSize(file: File): Long {        if (file.isFile) return file.length()
+        var total = 0L
+        val stack = ArrayDeque<File>()
+        stack.addLast(file)
+        while (stack.isNotEmpty()) {
+            val dir = stack.removeLast()
+            val children = dir.listFiles() ?: continue
+            for (child in children) {
+                if (child.isDirectory) stack.addLast(child) else total += child.length()
+            }
+        }
+        return total
+    }
+
+    private fun resolvePasteTarget(
+        destDir: File,
+        originalName: String,
+        isDir: Boolean,
+        policy: CollisionPolicy,
+    ): File? {
+        val candidate = destDir.resolve(originalName)
+        if (!candidate.exists()) return candidate
+        return when (policy) {
+            CollisionPolicy.SKIP -> null
+            CollisionPolicy.OVERWRITE -> candidate
+            CollisionPolicy.KEEP_BOTH -> resolveNonCollidingTarget(destDir, originalName, isDir)
+        }
+    }
+
     private fun resolveNonCollidingTarget(destDir: File, originalName: String, isDir: Boolean): File {
         var candidate = destDir.resolve(originalName)
         if (!candidate.exists()) return candidate
@@ -560,14 +731,20 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
         return candidate
     }
 
-    private fun copyFileOrDir(src: File, target: File) {
+    private fun copyFileOrDir(
+        src: File,
+        target: File,
+        progress: CopyProgress? = null,
+        onProgress: (copied: Long, total: Long) -> Unit = { _, _ -> },
+    ) {
         if (src.isDirectory) {
             if (!target.exists() && !target.mkdirs()) {
                 error("Could not create directory ${target.name}")
             }
             val children = src.listFiles() ?: emptyArray()
             for (child in children) {
-                copyFileOrDir(child, target.resolve(child.name))
+                if (cancelRequested) error("Cancelled")
+                copyFileOrDir(child, target.resolve(child.name), progress, onProgress)
             }
         } else {
             target.parentFile?.let { if (!it.exists()) it.mkdirs() }
@@ -575,9 +752,18 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
                 FileOutputStream(target).use { output ->
                     val buffer = ByteArray(64 * 1024)
                     while (true) {
+                        if (cancelRequested) {
+                            output.close()
+                            target.delete()
+                            error("Cancelled")
+                        }
                         val read = input.read(buffer)
                         if (read <= 0) break
                         output.write(buffer, 0, read)
+                        if (progress != null) {
+                            progress.copiedBytes += read
+                            onProgress(progress.copiedBytes, progress.totalBytes)
+                        }
                     }
                     output.fd.sync()
                 }

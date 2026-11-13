@@ -46,12 +46,18 @@ import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.ContentPaste
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.DriveFileRenameOutline
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Numbers
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.TextFields
+import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material3.AlertDialog
@@ -231,6 +237,7 @@ fun EditorScreen(
     onOpenSingleFile: (String) -> Unit = {},
 ) {
     val app = LocalContext.current.applicationContext as Application
+    val context = LocalContext.current
     val vm: EditorViewModel = viewModel(
         key = sessionKey,
         factory = EditorViewModel.factory(paths, app),
@@ -244,6 +251,8 @@ fun EditorScreen(
     var showBatchActions by rememberSaveable { mutableStateOf(false) }
     var showExitConfirm by rememberSaveable { mutableStateOf(false) }
     var filesSheetOpen by rememberSaveable { mutableStateOf(false) }
+    var numberingMode by rememberSaveable { mutableStateOf<String?>(null) }
+    var validationIssues by remember { mutableStateOf<List<String>?>(null) }
 
     val requestExit: () -> Unit = {
         if (state.hasEdits) showExitConfirm = true else onDone()
@@ -252,6 +261,38 @@ fun EditorScreen(
 
     val pickCover = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         uri?.let(vm::onCoverPicked)
+    }
+
+    val exportCsv = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
+        uri?.let {
+            val count = runCatching {
+                context.contentResolver.openOutputStream(it)?.use { stream -> vm.exportCsv(stream) }
+            }.getOrNull()
+            vm.setStatus(if (count != null) "Exported $count file(s) to CSV" else "CSV export failed")
+        }
+    }
+
+    val importCsv = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let {
+            val count = runCatching {
+                context.contentResolver.openInputStream(it)?.use { stream -> vm.importCsv(stream) }
+            }.getOrNull()
+            vm.setStatus(if (count != null) "Imported tags for $count file(s)" else "CSV import failed")
+        }
+    }
+
+    val exportCover = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("image/jpeg")) { uri ->
+        uri?.let {
+            val bytes = vm.currentCoverBytes()
+            val ok = if (bytes == null) {
+                false
+            } else {
+                runCatching {
+                    context.contentResolver.openOutputStream(it)?.use { stream -> stream.write(bytes) }
+                }.isSuccess
+            }
+            vm.setStatus(if (ok) "Cover extracted" else "No cover to extract")
+        }
     }
 
     val includedSnapshots = state.snapshots.filter { it.path !in state.excludedPaths }
@@ -330,6 +371,22 @@ fun EditorScreen(
                 .padding(padding)
                 .windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal)),
         ) {
+            state.statusMessage?.let { message ->
+                Surface(
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .fillMaxWidth()
+                        .clickable { vm.setStatus(null) },
+                ) {
+                    Text(
+                        text = message,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                    )
+                }
+            }
             if (state.loading) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -341,6 +398,8 @@ fun EditorScreen(
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
+                            Spacer(Modifier.height(8.dp))
+                            TextButton(onClick = vm::cancelReload) { Text("Cancel") }
                         }
                     }
                 }
@@ -539,7 +598,17 @@ fun EditorScreen(
                 }
             },
             confirmButton = {
-                TextButton(onClick = vm::dismissOutcomes) { Text("OK") }
+                Row {
+                    if (state.lastSaveBackup != null) {
+                        TextButton(
+                            onClick = {
+                                vm.dismissOutcomes()
+                                vm.restoreLastSave()
+                            },
+                        ) { Text("Undo save") }
+                    }
+                    TextButton(onClick = vm::dismissOutcomes) { Text("OK") }
+                }
             },
         )
     }
@@ -638,19 +707,52 @@ fun EditorScreen(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
                 )
                 listOf(
-                    Triple(Icons.Filled.TextFields, "Tags from filename…", 0),
-                    Triple(Icons.Filled.DriveFileRenameOutline, "Rename from tags…", 1),
-                    Triple(Icons.Filled.AutoFixHigh, "Batch actions…", 2),
+                    Triple(Icons.Filled.ContentCopy, "Copy tags from first file", 0),
+                    Triple(Icons.Filled.ContentPaste, "Paste tags to selected files", 1),
+                    Triple(Icons.Filled.Numbers, "Auto-number tracks…", 2),
+                    Triple(Icons.Filled.Numbers, "Auto-number discs…", 3),
+                    Triple(Icons.Filled.Checklist, "Check tags…", 4),
+                    Triple(Icons.Filled.Image, "Use cover from folder", 5),
+                    Triple(Icons.Filled.Save, "Extract cover art…", 6),
+                    Triple(Icons.Filled.UploadFile, "Export tags to CSV…", 7),
+                    Triple(Icons.Filled.Download, "Import tags from CSV…", 8),
+                    Triple(Icons.Filled.Speed, "Detect BPM", 9),
+                    Triple(Icons.AutoMirrored.Filled.Undo, "Undo last save", 10),
+                    Triple(Icons.Filled.TextFields, "Tags from filename…", 11),
+                    Triple(Icons.Filled.DriveFileRenameOutline, "Rename from tags…", 12),
+                    Triple(Icons.Filled.AutoFixHigh, "Batch actions…", 13),
                 ).forEach { (icon, label, id) ->
+                    val enabled = when (id) {
+                        1 -> state.clipboardCount > 0
+                        10 -> state.lastSaveBackup != null
+                        else -> true
+                    }
                     ListItem(
-                        headlineContent = { Text(label) },
+                        headlineContent = {
+                            Text(
+                                label,
+                                color = if (enabled) MaterialTheme.colorScheme.onSurface
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        },
                         leadingContent = { Icon(icon, contentDescription = null) },
-                        modifier = Modifier.clickable {
+                        modifier = Modifier.clickable(enabled = enabled) {
                             toolsSheetOpen = false
                             when (id) {
-                                0 -> showFilenameTags = true
-                                1 -> showRename = true
-                                2 -> showBatchActions = true
+                                0 -> vm.copyTags()
+                                1 -> vm.pasteTags()
+                                2 -> numberingMode = "track"
+                                3 -> numberingMode = "disc"
+                                4 -> validationIssues = vm.validationReport()
+                                5 -> vm.useFolderCover()
+                                6 -> exportCover.launch("cover.jpg")
+                                7 -> exportCsv.launch("mp3tag-tags.csv")
+                                8 -> importCsv.launch(arrayOf("text/csv", "text/comma-separated-values", "text/plain"))
+                                9 -> vm.detectBpm()
+                                10 -> vm.restoreLastSave()
+                                11 -> showFilenameTags = true
+                                12 -> showRename = true
+                                13 -> showBatchActions = true
                             }
                         },
                     )
@@ -692,6 +794,36 @@ fun EditorScreen(
             displayedKeys = state.displayedKeys,
             onApply = vm::applyTransforms,
             onDismiss = { showBatchActions = false },
+        )
+    }
+
+    numberingMode?.let { mode ->
+        AutoNumberDialog(
+            mode = mode,
+            onApply = { start, step, total ->
+                if (mode == "track") vm.applyTrackNumbers(start, step, total)
+                else vm.applyDiscNumbers(start, step, total)
+                numberingMode = null
+            },
+            onDismiss = { numberingMode = null },
+        )
+    }
+
+    validationIssues?.let { issues ->
+        AlertDialog(
+            onDismissRequest = { validationIssues = null },
+            title = { Text("Tag check") },
+            text = {
+                Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                    issues.forEach { issue ->
+                        Text("• $issue", style = MaterialTheme.typography.bodyMedium)
+                        Spacer(Modifier.height(6.dp))
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { validationIssues = null }) { Text("Close") }
+            },
         )
     }
 
@@ -1036,6 +1168,70 @@ private fun FileInfoCard(snapshots: List<TagSnapshot>) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
+private fun AutoNumberDialog(
+    mode: String,
+    onApply: (start: Int, step: Int, total: Int?) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var start by rememberSaveable { mutableStateOf("1") }
+    var step by rememberSaveable { mutableStateOf("1") }
+    var total by rememberSaveable { mutableStateOf("") }
+    val label = if (mode == "track") "track" else "disc"
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Auto-number $label(s)") },
+        text = {
+            Column {
+                Text(
+                    "Files are numbered in filename order (natural sort).",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = start,
+                    onValueChange = { start = it.filter(Char::isDigit) },
+                    label = { Text("Start at") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = step,
+                    onValueChange = { step = it.filter(Char::isDigit) },
+                    label = { Text("Increment") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = total,
+                    onValueChange = { total = it.filter(Char::isDigit) },
+                    label = { Text("Total (optional)") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    onApply(
+                        start.toIntOrNull()?.coerceAtLeast(0) ?: 1,
+                        step.toIntOrNull()?.coerceAtLeast(1) ?: 1,
+                        total.toIntOrNull()?.takeIf { it > 0 },
+                    )
+                },
+            ) { Text("Apply") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        },
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
 private fun LabeledField(
     key: FieldKey,
     state: EditorState,
@@ -1085,6 +1281,14 @@ private fun LabeledField(
                         Icon(
                             Icons.Filled.ArrowDropDown,
                             contentDescription = "Show values in files",
+                        )
+                    }
+                }
+                if (key in state.overrideKeys) {
+                    IconButton(onClick = { vm.revertField(key) }) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.Undo,
+                            contentDescription = "Revert ${fieldLabel(key)} to the saved value",
                         )
                     }
                 }

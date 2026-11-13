@@ -19,7 +19,7 @@ Single user, sideloaded, never going to the Play Store.
   - **WMA / ASF** (`.wma`/`.asf`)
   - **APE** (Monkey's Audio `.ape`) & **WavPack** (`.wv`) via APEv2 (`APETAGEX`)
   - **DSF** (DSD) & **DFF** (DSDIFF `.dff`, embedded `"ID3 "` chunk in `"FRM8"`, ID3v2.3 / ID3v2.4 selectable)
-- versionName 0.7.1 / versionCode 26 (v0.1.0 phase 1, v0.2.1 phase 2, v0.2.2 adaptive UI + hardware scaling, v0.3.0 Home grid + File Manager + Automate, v0.3.1 folder selection + versioned APK/releases, v0.3.2 Theme Screen mode & Design language selector, v0.3.3 roadmap cleanup, v0.4.0 Phase 3 extended audio formats, v0.4.1 audio format conversion added to roadmap, v0.4.2 browser folder summary + in-place tag write fix for DFF/APE, v0.5.0 spectrum analysis, v0.5.1 bit-depth check, v0.5.2 unsaved-edit persistence + undo/redo + per-file edit + kept-values report, v0.5.3–0.6.3 free-form custom fields + ReplayGain matching Tag Editor UX + existing RG detection/skip/remove + Opus R128 + iPod/iTunes Cover Flow Home + in-app File Manager for Spectrum analysis + expanded Settings with Update checker, Release/Beta channel selector, Developer `@areyouanand` Vision credit & GitHub links, **v0.7.0 FFmpeg-based audio format conversion**, **v0.7.1 1:1 metadata copying (custom fields + cover art for FLAC/Ogg/Opus) and per-ABI APKs**)
+- versionName 0.8.0 / versionCode 27 (v0.1.0 phase 1, v0.2.1 phase 2, v0.2.2 adaptive UI + hardware scaling, v0.3.0 Home grid + File Manager + Automate, v0.3.1 folder selection + versioned APK/releases, v0.3.2 Theme Screen mode & Design language selector, v0.3.3 roadmap cleanup, v0.4.0 Phase 3 extended audio formats, v0.4.1 audio format conversion added to roadmap, v0.4.2 browser folder summary + in-place tag write fix for DFF/APE, v0.5.0 spectrum analysis, v0.5.1 bit-depth check, v0.5.2 unsaved-edit persistence + undo/redo + per-file edit + kept-values report, v0.5.3–0.6.3 free-form custom fields + ReplayGain matching Tag Editor UX + existing RG detection/skip/remove + Opus R128 + iPod/iTunes Cover Flow Home + in-app File Manager for Spectrum analysis + expanded Settings with Update checker, Release/Beta channel selector, Developer `@areyouanand` Vision credit & GitHub links, **v0.7.0 FFmpeg-based audio format conversion**, **v0.7.1 1:1 metadata copying + per-ABI APKs**, **v0.8.0 multi-value tags, MP4/ASF custom fields, WavPack covers, crash-safe writes, BS.1770 ReplayGain, tag-aware browser, editor power tools, file-manager trash/conflict/SHA, conversion patterns, settings backup & LGPL licenses**)
 
 ## Locked-in product decisions (do not silently change)
 
@@ -44,7 +44,7 @@ Single user, sideloaded, never going to the Play Store.
    forks must not imply endorsement by, or affiliation with, the original Mp3tag (mp3tag.de)
    or its author.
 
-## Current state (v0.7.1 — v0.7.0 is the current stable release; v0.7.1 is on `beta`. Verified with 12 JVM + 16 instrumentation tests on the Pixel_9_API_37 emulator. The DX270 still runs a v0.7.0 APK from an earlier test run; the new metadata/ABI work has not been exercised on its hardware yet)
+## Current state (v0.8.0 — local working build, deliberately **not published** per the standing rule below. v0.7.0 remains the published stable release and v0.7.1-beta the last beta. Verified with 29 JVM tests + 18 instrumentation tests on the Pixel_9_API_37 emulator. The DX270 still runs a v0.7.0 APK from an earlier test run; the new tags/ABI features have not been exercised on its hardware yet)
 
 **Recent additions (v0.5.2–0.6.3)**:
 - **Unsaved edit cache persistence** (`EditorDraftStore`): SHA-256-keyed draft in cache dir survives process death / app kill; cleared on discard or when no edits remain after save.
@@ -52,7 +52,7 @@ Single user, sideloaded, never going to the Play Store.
 - **Per-file editing from batch screen**: files sheet has an "Edit" button per file opening a single-file editor session.
 - **Kept pending edits report**: save outcomes dialog lists files whose pending edits were retained (excluded files).
 - **Free-form custom fields**: `WriteRequest.customFields` and `TagEngine.readCustomFields` read/write ID3 `TXXX` frames (`Id3CustomFields`, including WAV/AIFF inner ID3 tags), VorbisComment arbitrary keys, OpusTags, APEv2 items, and DFF ID3 chunks.
-- **ReplayGain loudness tagging** (`data/replaygain/LoudnessAnalyzer.kt`, `ui/replaygain/ReplayGainScreen.kt`): reuses `BrowserScreen` for selecting folders/files, then opens a Tag-Editor-style analysis & tagging screen with top scan progress banner, dropdown `ModalBottomSheet` selector for Track gain / Album gain / Opus R128 (`R128_TRACK_GAIN` & `R128_ALBUM_GAIN` Q7.8 at -23 LUFS, enabled only when `.opus` files are present), existing ReplayGain tag detection, "Skip files that already have ReplayGain", and "Remove ReplayGain tags". Since v0.7.0 it decodes through `FfmpegPcmReader`, so DSD/APE/WavPack files are analysed too (MediaCodec is only a fallback). Note the loudness maths is still the original approximation: a first-order high-pass + 1.5× gain instead of true BS.1770 K-weighting, and no gating or true-peak oversampling.
+- **ReplayGain loudness tagging** (`data/replaygain/LoudnessAnalyzer.kt`, `ui/replaygain/ReplayGainScreen.kt`): reuses `BrowserScreen` for selecting folders/files, then opens a Tag-Editor-style analysis & tagging screen with top scan progress banner, dropdown `ModalBottomSheet` selector for Track gain / Album gain / Opus R128 (`R128_TRACK_GAIN` & `R128_ALBUM_GAIN` Q7.8 at -23 LUFS, enabled only when `.opus` files are present), existing ReplayGain tag detection, "Skip files that already have ReplayGain", and "Remove ReplayGain tags". Since v0.7.0 it decodes through `FfmpegPcmReader`, so DSD/APE/WavPack files are analysed too (MediaCodec is only a fallback). Note the loudness maths is now ITU-R BS.1770-4 (K-weighting, gated 400 ms blocks, 4x true peak, clip-safe gain) since v0.8.0.
 - **Home iPod / iTunes Cover Flow** (`ui/home/HomeScreen.kt`): orientation-aware 3D Cover Flow carousel (`rememberSnapFlingBehavior`, overlapping `zIndex` stacks, ~54°/58° inward perspective, glossy album-sleeve gradient + diagonal glass sheen + stage reflection, vertical scroll in portrait and horizontal in landscape) with virtual infinite scroll (2000× tiles).
 - **Spectrum analysis uses in-app File Manager** (`ui/spectrum/SpectrumScreen.kt`, `ui/filemanager/FileManagerScreen.kt`): replaced the system SAF document picker with the in-app `FileManagerScreen` (one-tap audio file analysis, plus "Analyze in Spectrum analysis" from the main File Manager).
 - **Expanded Settings & Update Checker** (`ui/settings/SettingsScreen.kt`, `data/update/UpdateChecker.kt`): ReplayGain defaults (Opus R128 default & skip already-tagged default), File Manager `.dot` hidden-files toggle, history/cache clear buttons (recent folders, saved patterns, unsaved editor drafts), **Updates** section with `Release (Stable)` vs `Beta (Prerelease)` channel selector + live GitHub Releases update checker & APK download, **Developer** section (`@areyouanand` — Vision), and **About** section with clickable GitHub repository & releases links.
@@ -70,13 +70,12 @@ Single user, sideloaded, never going to the Play Store.
 - Conversion is sequential (one decode+encode at a time), reports 0–100 % per file through a JNI
   callback every 200 ms, and `nativeCancel()` aborts between packets. Output never overwrites:
   collisions become `name (converted).ext` / `name (converted 2).ext`.
-- **Metadata is copied 1:1** (v0.7.1): `TagEngine.readAllCustomFields()` enumerates every ID3 `TXXX`
-  frame, VorbisComment key and APEv2 item, and the converter replays them on the target after the
-  standard field pass. Cover art is copied for **MP3, FLAC, M4A/ALAC, Opus, Ogg Vorbis, WAV, AIFF and
-  WMA**; **WavPack** cover writing is still broken (the APEv2 binary item round-trip needs its own
-  fix) and the converter reports "Cover art not copied" instead of failing silently. MP4 freeform
-  atoms and ASF attributes are not enumerated yet, so custom fields on `.m4a`/`.wma` targets are
-  reported as not copied. Multi-value tags (e.g. two ARTIST comments) still collapse to one value.
+- **Metadata is copied 1:1** (v0.7.1, extended v0.8.0): `TagEngine.readAllCustomFields()` enumerates
+  every ID3 `TXXX` frame, VorbisComment key, APEv2 item, MP4 reverse-DNS atom and ASF attribute,
+  and the converter replays them on the target after the standard field pass. Cover art is copied
+  for **MP3, FLAC, M4A/ALAC, Opus, Ogg Vorbis, WAV, AIFF, WMA and WavPack** (the APEv2 read-back
+  bug was fixed in v0.8.0). Multi-value tags (two ARTIST comments, several genres) are preserved
+  for ID3/Vorbis/Opus targets; APEv2 targets warn because the format holds one value per key.
 - Cover art got its own writers because JAudioTagger's `AndroidArtwork.setImageFromData()` throws on
   Android: `FlacPictureHandler` writes FLAC `PICTURE` blocks directly (via `writeSafely`, with a
   PNG/JPEG dimension parser), and Ogg/Opus get a base64 `METADATA_BLOCK_PICTURE` comment.
@@ -94,6 +93,23 @@ Single user, sideloaded, never going to the Play Store.
   (`./gradlew connectedDebugAndroidTest`) converts generated WAV/DFF sources to MP3, FLAC, M4A,
   Opus and 24-bit WAV and checks container magic bytes. JVM tests cover option normalisation and
   output naming (`app/src/test/.../data/convert/ConversionOptionsTest.kt`).
+
+## v0.8.0 feature pass (quality & workflow improvements)
+
+- **Metadata correctness**
+  - Multi-value tags: `TagSnapshot.multiFields` + `WriteRequest.multiFields`; ID3 (MP3/WAV/AIFF/DSF/DFF), Vorbis (FLAC/Ogg) and Opus store separate ARTIST/ALBUM_ARTIST/GENRE/COMPOSER/PERFORMER values. The editor shows them joined with `; ` and splits on save; conversion replays them. APEv2 holds one value per key, so `.ape`/`.wv` targets report "Multi-value tags not copied".
+  - MP4 free-form atoms (`----:com.apple.iTunes:<KEY>`) and ASF attributes are read/written by `TagEngine`. Note `Mp4TagReverseDnsField`'s constructor order is `(id, issuer, descriptor, content)`.
+  - WavPack APEv2 cover read-back fixed: the parser used `ByteBuffer.wrap(bytes, pos, 8).getInt(0)` (absolute index 0) for every item; it now uses `itemsBuf.getInt(pos)` / `getInt(pos+4)`. Covered by `ApeTagHandlerTest`.
+  - Every JAudioTagger tag write now goes through `writeSafely()` (temp sibling with the original extension, atomic replace), so a crash mid-save cannot truncate a file.
+- **Editor**: tag clipboard, auto-number tracks/discs (natural order), tag-consistency check, per-field revert, cover from `cover.jpg`/`folder.jpg`, cover extraction, BPM detection (`data/audio/BpmDetector.kt`), CSV export/import, "undo last save", cancellable batch reads, and rename patterns with `/` subfolders.
+- **Browser**: background tag scan; tag-aware search; sort by title/artist/album/disc-track/duration/size/date (persisted); duplicate finder (ARTIST + TITLE) with "select extras".
+- **File manager**: paste conflict policy (keep both/overwrite/skip), cancellable copy/move with progress, free-space pre-check, move-to-trash (`.mp3tag-trash`), SHA-256 in Properties.
+- **ReplayGain**: ITU-R BS.1770-4 K-weighting, 400 ms gated blocks, −70 LUFS absolute + −10 LU relative gates, 4× true peak, clip-safe gain, properly gated album gain. Short/silent files report the −70 LUFS floor instead of `null`.
+- **Conversion**: output subfolder + filename pattern (with `/` trees), path-traversal sanitation, preserve timestamps, FLAC/WavPack compression level, post-write field/cover verification; M4A/WMA custom fields no longer warn.
+- **Spectrum**: 15/30/60 s window selector, signal-health card (peak/crest/DC/clipping), result cache (path+mtime+window), PNG spectrogram export.
+- **Settings**: JSON settings backup/restore, release notes in the update card, in-app open-source licenses (MIT + LGPL FFmpeg/LAME/libopus + Apache 2.0).
+
+**Still open**: parallel/persistent conversion queue (WorkManager + foreground notification), loudness-normalising conversion (`loudnorm`), windowed-sinc true peak, spectrum threshold calibration on real material, a real Automate workspace, browser range selection, file-manager background transfers, full string extraction/localisation.
 
 **Spectrum analysis** (v0.5.0, bit-depth check v0.5.1, in-app File Manager v0.6.2, FFmpeg decoding v0.7.0; `data/spectrum/`, `data/audio/`, `ui/spectrum/`, Home tile):
 - `PcmDecoder` decodes a 60 s window from the middle of a file to mono float. Since v0.7.0 it uses the
@@ -237,7 +253,7 @@ mixed-cover detection. Section sits at the bottom of the editor (user requested)
 - **FLAC/Ogg/Opus cover art cannot go through JAudioTagger on Android**
   (`AndroidArtwork.setImageFromData()` throws). FLAC uses `FlacPictureHandler` (direct `PICTURE`
   block), Ogg/Opus use a base64 `METADATA_BLOCK_PICTURE` comment. WavPack (`APEv2` `Cover Art
-  (front)`) writes the item but the read-back still returns nothing — open follow-up.
+  (front)`) writes and reads the binary item again since v0.8.0 (APEv2 parser fix).
 - **`AudioFileIO.read` on a file whose format's reader can throw KeyNotFoundException for
   unsupported FieldKeys** — every `getFirst()` must be wrapped in runCatching. Unsupported keys
   set in `setField` fail per-file and surface in the save-results dialog (acceptable).
@@ -301,7 +317,7 @@ mixed-cover detection. Section sits at the bottom of the editor (user requested)
 
 - **Beta channel**: the `beta` branch is also built by `.github/workflows/build.yml`. Those builds are tagged
   `v<versionName>-beta`, published as **prereleases**, and never marked Latest. `master` stays the stable channel.
-  Current stable: `v0.7.0`; current beta: `v0.7.1-beta`.
+  Current stable: `v0.7.0`; last beta: `v0.7.1-beta`; local working build: `v0.8.0` (**not published**).
 
 ## Workflow conventions
 

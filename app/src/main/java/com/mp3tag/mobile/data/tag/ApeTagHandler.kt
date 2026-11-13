@@ -426,9 +426,10 @@ internal object ApeTagHandler {
             raf.readFully(rawItems)
             var pos = 0
             var parsedCount = 0
+            val itemsBuf = ByteBuffer.wrap(rawItems).order(ByteOrder.LITTLE_ENDIAN)
             while (pos + 8 <= rawItems.size && parsedCount < itemCount) {
-                val valSize = ByteBuffer.wrap(rawItems, pos, 8).order(ByteOrder.LITTLE_ENDIAN).getInt(0)
-                val itemFlags = ByteBuffer.wrap(rawItems, pos, 8).order(ByteOrder.LITTLE_ENDIAN).getInt(4)
+                val valSize = itemsBuf.getInt(pos)
+                val itemFlags = itemsBuf.getInt(pos + 4)
                 pos += 8
                 val keyStart = pos
                 while (pos < rawItems.size && rawItems[pos] != 0.toByte()) {

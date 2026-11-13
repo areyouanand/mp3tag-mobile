@@ -219,14 +219,15 @@ private fun ReplayGainEditorView(
 
     fun recomputeAlbumMetrics(currentTracks: List<TrackLoudness>, currentExcluded: Set<String>) {
         val included = currentTracks.filter { it.path !in currentExcluded }
-        if (included.isEmpty()) {
+        val album = LoudnessAnalyzer.albumMetrics(included)
+        if (album == null) {
             albumGain = null
             albumLufs = null
             albumPeakLinear = null
         } else {
-            albumGain = included.map { it.gainDb }.average()
-            albumLufs = included.map { it.lufs }.average()
-            albumPeakLinear = included.maxOfOrNull { 10.0.pow(it.peakDb / 20.0) }
+            albumGain = album.gainDb
+            albumLufs = album.lufs
+            albumPeakLinear = 10.0.pow(album.peakDb / 20.0)
         }
     }
 
