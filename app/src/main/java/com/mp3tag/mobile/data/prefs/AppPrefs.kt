@@ -140,6 +140,38 @@ class AppPrefs(context: Context) {
         prefs.edit().remove(KEY_SAVED_PATTERNS).apply()
     }
 
+    // ---------------------------------------------------------------------
+    // Audio conversion defaults (Convert screen)
+    // ---------------------------------------------------------------------
+
+    var convertTarget: String?
+        get() = prefs.getString(KEY_CONVERT_TARGET, null)
+        set(value) = prefs.edit().putString(KEY_CONVERT_TARGET, value).apply()
+
+    var convertBitrate: Int
+        get() = prefs.getInt(KEY_CONVERT_BITRATE, 320)
+        set(value) = prefs.edit().putInt(KEY_CONVERT_BITRATE, value).apply()
+
+    var convertSampleRate: Int
+        get() = prefs.getInt(KEY_CONVERT_SAMPLE_RATE, 0)
+        set(value) = prefs.edit().putInt(KEY_CONVERT_SAMPLE_RATE, value).apply()
+
+    var convertChannels: Int
+        get() = prefs.getInt(KEY_CONVERT_CHANNELS, 0)
+        set(value) = prefs.edit().putInt(KEY_CONVERT_CHANNELS, value).apply()
+
+    var convertBitDepth: Int
+        get() = prefs.getInt(KEY_CONVERT_BIT_DEPTH, 16)
+        set(value) = prefs.edit().putInt(KEY_CONVERT_BIT_DEPTH, value).apply()
+
+    var convertKeepTags: Boolean
+        get() = prefs.getBoolean(KEY_CONVERT_KEEP_TAGS, true)
+        set(value) = prefs.edit().putBoolean(KEY_CONVERT_KEEP_TAGS, value).apply()
+
+    var convertDeleteSource: Boolean
+        get() = prefs.getBoolean(KEY_CONVERT_DELETE_SOURCE, false)
+        set(value) = prefs.edit().putBoolean(KEY_CONVERT_DELETE_SOURCE, value).apply()
+
     companion object {
         private const val KEY_ID3_VERSION = "id3_version"
         private const val KEY_THEME = "theme_mode"
@@ -153,6 +185,13 @@ class AppPrefs(context: Context) {
         private const val KEY_LAST_FM_FOLDER = "last_fm_folder"
         private const val KEY_SHOW_HIDDEN_FILES = "show_hidden_files"
         private const val KEY_SAVED_PATTERNS = "saved_patterns"
+        private const val KEY_CONVERT_TARGET = "convert_target"
+        private const val KEY_CONVERT_BITRATE = "convert_bitrate"
+        private const val KEY_CONVERT_SAMPLE_RATE = "convert_sample_rate"
+        private const val KEY_CONVERT_CHANNELS = "convert_channels"
+        private const val KEY_CONVERT_BIT_DEPTH = "convert_bit_depth"
+        private const val KEY_CONVERT_KEEP_TAGS = "convert_keep_tags"
+        private const val KEY_CONVERT_DELETE_SOURCE = "convert_delete_source"
         private const val RECENT_SEPARATOR = "\u0001"
         private const val MAX_RECENTS = 8
         private const val MAX_SAVED_PATTERNS = 12

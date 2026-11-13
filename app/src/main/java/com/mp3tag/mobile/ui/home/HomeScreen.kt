@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -84,6 +85,7 @@ private data class HomeTileItem(
 fun HomeScreen(
     onOpenTagEditor: () -> Unit,
     onOpenFileManager: () -> Unit,
+    onOpenConvert: () -> Unit,
     onOpenSpectrum: () -> Unit,
     onOpenReplayGain: () -> Unit,
     onOpenAutomate: () -> Unit,
@@ -115,6 +117,17 @@ fun HomeScreen(
             gradientEnd = Color(0xFF2B7A78),
             accentColor = Color(0xFF80CBC4),
             onClick = onOpenFileManager,
+        ),
+        HomeTileItem(
+            id = "convert",
+            title = "Convert",
+            subtitle = "Transcode between MP3, FLAC, M4A, Opus, WAV, AIFF, WMA & WavPack",
+            badge = "FFmpeg • tags preserved",
+            icon = Icons.Filled.SwapHoriz,
+            gradientStart = Color(0xFF0F3B3F),
+            gradientEnd = Color(0xFF1F6F6B),
+            accentColor = Color(0xFF80CBC4),
+            onClick = onOpenConvert,
         ),
         HomeTileItem(
             id = "spectrum",

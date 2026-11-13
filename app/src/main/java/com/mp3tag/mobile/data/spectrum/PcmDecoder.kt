@@ -6,6 +6,7 @@ import android.media.MediaCodec
 import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.net.Uri
+import com.mp3tag.mobile.data.audio.FfmpegPcmReader
 import java.io.File
 import java.io.FileInputStream
 import java.nio.ByteBuffer
@@ -18,16 +19,25 @@ internal class DecodedAudio(
     val codecLabel: String,
     val fileDurationSeconds: Double,
     val bitStats: BitStats = BitStats(),
+    /** Bit depth declared by the codec/container, when known (e.g. 24-bit APE). */
+    val sourceBits: Int? = null,
 )
 
 /**
- * Decodes a window of an audio file to mono float PCM with the platform MediaCodec.
- * Only formats Android can decode are supported (MP3, AAC, FLAC, Opus, Vorbis, PCM WAV when
- * the device provides a decoder). DSD, APE and WavPack are not supported here.
+ * Decodes a window of an audio file to mono float PCM.
+ *
+ * The bundled FFmpeg decoder is used first: it handles every format the app
+ * supports (DSD/DSF/DFF, APE, WavPack, AIFF, WMA, …) at the file's native sample
+ * rate. MediaCodec remains as a fallback for hardware-specific formats (and for
+ * `content://` URIs) when FFmpeg is unavailable or cannot open the file.
  */
 internal object PcmDecoder {
 
+    /** Hard cap on decoded samples (~32 MB of float PCM) for very high sample rates. */
+    private const val MAX_SAMPLES = 8_000_000
+
     fun decode(file: File, windowSeconds: Double): DecodedAudio {
+        decodeWithFfmpeg(file, windowSeconds)?.let { return it }
         val extractor = MediaExtractor()
         try {
             FileInputStream(file).use { fis ->
@@ -37,6 +47,48 @@ internal object PcmDecoder {
         } finally {
             extractor.release()
         }
+    }
+
+    private fun decodeWithFfmpeg(file: File, windowSeconds: Double): DecodedAudio? {
+        val reader = FfmpegPcmReader.open(file, windowSeconds) ?: return null
+        return reader.use { open ->
+            val rate = open.sampleRate
+            val wanted = if (windowSeconds > 0) {
+                minOf((windowSeconds * rate).toLong(), MAX_SAMPLES.toLong()).toInt()
+            } else {
+                MAX_SAMPLES
+            }
+            val buffer = FloatArray(wanted)
+            var filled = 0
+            while (filled < wanted) {
+                val chunk = open.read(minOf(1 shl 18, wanted - filled)) ?: break
+                chunk.copyInto(buffer, filled)
+                filled += chunk.size
+            }
+            if (filled == 0) return@use null
+
+            val stats = BitStats()
+            stats.add(open.sampleOrBits.toInt(), open.integerWidth)
+            DecodedAudio(
+                sampleRate = rate,
+                mono = if (filled == buffer.size) buffer else buffer.copyOf(filled),
+                codecLabel = prettyCodec(open.codecName),
+                fileDurationSeconds = open.durationSeconds,
+                bitStats = stats,
+                sourceBits = open.sourceBits,
+            )
+        }
+    }
+
+    private fun prettyCodec(name: String): String = when {
+        name.startsWith("dsd") -> "DSD"
+        name == "ape" -> "MONKEY'S AUDIO"
+        name == "wavpack" -> "WAVPACK"
+        name == "wmav1" || name == "wmav2" -> "WMA"
+        name == "alac" -> "ALAC"
+        name == "libopus" || name == "opus" -> "OPUS"
+        name.isBlank() -> "AUDIO"
+        else -> name.uppercase()
     }
 
     fun decode(context: Context, uri: Uri, windowSeconds: Double): DecodedAudio {

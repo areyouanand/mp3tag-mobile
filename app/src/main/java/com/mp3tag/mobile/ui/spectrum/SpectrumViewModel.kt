@@ -44,7 +44,6 @@ class SpectrumViewModel(application: Application) : AndroidViewModel(application
         _state.value = SpectrumUiState(filePath = path, fileName = name, loading = true)
         val extension = file.extension.lowercase()
         val lossless = extension in LOSSLESS_EXTENSIONS
-        val unsupported = extension in UNSUPPORTED_EXTENSIONS
 
         viewModelScope.launch {
             val result = withContext(Dispatchers.Default) {
@@ -52,15 +51,12 @@ class SpectrumViewModel(application: Application) : AndroidViewModel(application
                     if (!file.exists() || !file.canRead()) {
                         error("This file could not be read: $name")
                     }
-                    if (unsupported) {
-                        error("DSD, Monkey's Audio and WavPack files can't be analysed on this device yet.")
-                    }
                     val audio = PcmDecoder.decode(file, WINDOW_SECONDS)
-                    val containerBits = if (lossless) {
+                    val containerBits = (if (lossless) {
                         ContainerProbe.bitsPerSample(file, extension)
                     } else {
                         null
-                    }
+                    }) ?: audio.sourceBits
                     val report = SpectrumAnalyzer.analyze(audio, lossless, containerBits)
                     val bitmap = Bitmap.createBitmap(
                         report.spectrogramPixels,
@@ -141,7 +137,7 @@ class SpectrumViewModel(application: Application) : AndroidViewModel(application
 
     private companion object {
         const val WINDOW_SECONDS = 60.0
-        val LOSSLESS_EXTENSIONS = setOf("flac", "wav", "wave", "aif", "aiff", "aifc")
+        val LOSSLESS_EXTENSIONS = setOf("flac", "wav", "wave", "aif", "aiff", "aifc", "ape", "wv", "dsf", "dff")
         val UNSUPPORTED_EXTENSIONS = setOf("dsf", "dff", "ape", "wv")
     }
 }

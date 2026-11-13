@@ -27,7 +27,7 @@ data class UpdateCheckResult(
 )
 
 object UpdateChecker {
-    const val CURRENT_VERSION_NAME = "0.6.3"
+    const val CURRENT_VERSION_NAME = "0.7.0"
     const val CURRENT_VERSION_CODE = 24
 
     const val GITHUB_REPO_URL = "https://github.com/areyouanand/mp3tag-mobile"

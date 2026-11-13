@@ -43,6 +43,7 @@ import com.mp3tag.mobile.data.prefs.Id3Version
 import com.mp3tag.mobile.data.prefs.PerformanceMode
 import com.mp3tag.mobile.data.prefs.ThemeMode
 import com.mp3tag.mobile.ui.automate.AutomateScreen
+import com.mp3tag.mobile.ui.convert.ConvertScreen
 import com.mp3tag.mobile.ui.spectrum.SpectrumScreen
 import com.mp3tag.mobile.ui.browser.BrowserScreen
 import com.mp3tag.mobile.ui.browser.BrowserViewModel
@@ -77,6 +78,7 @@ sealed interface Screen {
     data object Browser : Screen
     data object FileManager : Screen
     data object Automate : Screen
+    data object Convert : Screen
     data class Spectrum(
         val initialPath: String? = null,
         val returnTo: Screen = Home,
@@ -135,6 +137,10 @@ class AppViewModel(application: android.app.Application) : AndroidViewModel(appl
 
     fun openAutomate() {
         _screen.value = Screen.Automate
+    }
+
+    fun openConvert() {
+        _screen.value = Screen.Convert
     }
 
     fun openSpectrum(initialPath: String? = null, returnTo: Screen = Screen.Home) {
@@ -224,6 +230,7 @@ fun Mp3tagApp(appViewModel: AppViewModel = viewModel()) {
                 Screen.Home -> HomeScreen(
                     onOpenTagEditor = appViewModel::openTagEditor,
                     onOpenFileManager = appViewModel::openFileManager,
+                    onOpenConvert = appViewModel::openConvert,
                     onOpenSpectrum = { appViewModel.openSpectrum() },
                     onOpenReplayGain = appViewModel::openReplayGain,
                     onOpenAutomate = appViewModel::openAutomate,
@@ -258,6 +265,11 @@ fun Mp3tagApp(appViewModel: AppViewModel = viewModel()) {
 
                 Screen.Automate -> AutomateScreen(
                     onBack = appViewModel::openHome,
+                )
+
+                Screen.Convert -> ConvertScreen(
+                    onBack = appViewModel::openHome,
+                    onOpenSettings = { appViewModel.openSettings(Screen.Convert) },
                 )
 
                 is Screen.Editor -> EditorScreen(
@@ -295,7 +307,8 @@ fun Mp3tagApp(appViewModel: AppViewModel = viewModel()) {
             }
 
             BackHandler(
-                enabled = screen is Screen.Settings || screen is Screen.Automate || screen is Screen.Spectrum
+                enabled = screen is Screen.Settings || screen is Screen.Automate ||
+                    screen is Screen.Spectrum || screen is Screen.Convert
             ) {
                 if (screen is Screen.Settings) {
                     browserVm.reloadPrefs()

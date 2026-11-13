@@ -12,7 +12,7 @@
 A personal-use Android audio tag editor and file manager that mirrors the workflow of [MP3Tag](https://www.mp3tag.de) for
 Windows, built with Kotlin, Jetpack Compose, and **Material 3 Expressive**.
 
-- Latest stable release: **v0.4.1** · Beta: **v0.6.3-beta** (`versionCode = 24`, branch `beta`)
+- Latest stable release: **v0.4.1** · Beta: **v0.7.0-beta** (`versionCode = 25`, branch `beta`)
 - All releases and downloads: **https://github.com/areyouanand/mp3tag-mobile/releases**
 - Minimum Android version: **12 (API 31)**
 - Uses the **All files access** permission (`MANAGE_EXTERNAL_STORAGE`) so it can browse any folder
@@ -23,23 +23,24 @@ Windows, built with Kotlin, Jetpack Compose, and **Material 3 Expressive**.
 | Channel | Version | Link |
 |---|---|---|
 | Stable (Latest) | v0.4.1 | [Latest release](https://github.com/areyouanand/mp3tag-mobile/releases/latest) |
-| Beta (prerelease) | v0.6.3-beta | [v0.6.3-beta](https://github.com/areyouanand/mp3tag-mobile/releases/tag/v0.6.3-beta) |
+| Beta (prerelease) | v0.7.0-beta | [v0.7.0-beta](https://github.com/areyouanand/mp3tag-mobile/releases/tag/v0.7.0-beta) |
 | All releases | | [releases](https://github.com/areyouanand/mp3tag-mobile/releases) |
 
 Install the APK from a release's **Assets** on your Android device. Beta builds may still have bugs.
 
-## Current status — v0.6.3 (beta)
+## Current status — v0.7.0 (beta)
 
 | Feature | State |
 |---|---|
+| **Audio format conversion (Home → Convert): MP3 (LAME), FLAC, M4A/AAC, M4A/ALAC, Opus, Ogg Vorbis, WAV, AIFF, WMA, WavPack — per-file progress, cancel, tag + cover copy, optional delete-original** | ✅ v0.7.0 |
 | **Settings: in-app GitHub update checker (`Release` vs `Beta` channel), ReplayGain defaults, File Manager/cache controls, Developer (`@areyouanand` Vision) & GitHub links** | ✅ v0.6.3 |
-| **Spectrum analysis (Home → Spectrum analysis): in-app File Manager picker, spectrogram, top-of-sound cutoff, upsampling & lossy-origin hints, bit-depth padding check** | ✅ v0.6.2 |
+| **Spectrum analysis (Home → Spectrum analysis): in-app File Manager picker, spectrogram, top-of-sound cutoff, upsampling & lossy-origin hints, bit-depth padding check — now decodes DSD (DSF/DFF), APE and WavPack through the bundled FFmpeg** | ✅ v0.7.0 |
 | **Folder summary and tap/long-press hint in the browser** | ✅ v0.4.2 |
 | **Safer DFF/APE tag writes (temp copy, replaced only on success)** | ✅ v0.4.2 |
 | **Extended audio formats (Phase 3): Opus (`.opus`), DFF / DSDIFF (`.dff`), Monkey's Audio (`.ape`), WavPack (`.wv`), WMA/ASF (`.wma`/`.asf`), AIFF (`.aif`/`.aiff`/`.aifc`), M4B (`.m4b`)** | ✅ v0.4.0 |
 | **Theme section: Screen mode (`Auto`, `Dark`, `Light`) + Design language (`Material 3 Expressive`, `Material You`, `Liquid Glass`, `Halo`)** | ✅ v0.3.2 |
-| **Home iPod / iTunes Cover Flow (`Tag editor`, `File manager`, `Spectrum analysis`, `ReplayGain`, `Automate`, `Settings`)** | ✅ v0.6.1 |
-| **ReplayGain loudness tagging**: browser selection, scan progress banner, Track gain / Album gain / Opus R128 dropdown, existing RG detection, skip existing, remove RG tags | ✅ v0.6.1 |
+| **Home iPod / iTunes Cover Flow (`Tag editor`, `File manager`, `Convert`, `Spectrum analysis`, `ReplayGain`, `Automate`, `Settings`)** | ✅ v0.7.0 |
+| **ReplayGain loudness tagging**: browser selection, scan progress banner, Track gain / Album gain / Opus R128 dropdown, existing RG detection, skip existing, remove RG tags — now analyses DSD/APE/WavPack too | ✅ v0.7.0 |
 | **Full File Manager (copy, move/cut, paste, rename, delete, new folder, sort, hidden files, properties, open in Tag Editor)** | ✅ v0.3.0 |
 | **Automate workspace section (placeholder ready for automation rules)** | ✅ v0.3.0 |
 | **Select / edit entire folders in Tag Editor (folder checkbox, long-press folder, or menu action)** | ✅ v0.3.1 |
@@ -61,7 +62,7 @@ Install the APK from a release's **Assets** on your Android device. Beta builds 
 | WAV: RIFF INFO + ID3 chunks (MP3Tag-style both) | ✅ |
 | DSD: DSF & DFF (DSDIFF) files tagged through their embedded ID3v2 tag | ✅ v0.4.0 |
 | FLAC, M4A/MP4/M4B, Ogg Vorbis, Opus, AIFF, WMA/ASF, APE (Monkey's Audio), WavPack (`.wv`) | ✅ v0.4.0 |
-| Audio format conversion (transcoding while preserving tags & cover art) | Roadmap |
+| Audio format conversion (transcoding while preserving tags & cover art) | ✅ v0.7.0 |
 | MusicBrainz / Discogs metadata & cover lookup | Phase 3 remaining |
 
 ## Building

@@ -60,28 +60,29 @@ internal object BitDepth {
                 SpectrumHint(
                     HintSeverity.INFO,
                     "Bit depth not verifiable",
-                    "This is a ${containerBits}-bit file, but this device decodes it to $decoded-bit, " +
+                    "This is a ${containerBits}-bit file, but the decoder delivers $decoded-bit samples, " +
                         "so padding inside the file can't be checked.",
                 )
             } else {
                 null
             }
         }
+        val declared = containerBits ?: decoded
         return when {
-            effective <= 16 -> SpectrumHint(
+            effective <= 16 && declared > 16 -> SpectrumHint(
                 HintSeverity.WARNING,
-                "16-bit audio in a ${containerBits ?: decoded}-bit file",
+                "16-bit audio in a $declared-bit file",
                 "Only $effective bits carry signal; the rest are zeros. Upscaling to a higher bit depth adds no detail.",
             )
-            effective < 24 -> SpectrumHint(
+            effective < declared -> SpectrumHint(
                 HintSeverity.INFO,
-                "Effective ${effective}-bit",
-                "The lowest ${decoded - effective} bits are always zero, so this is ${effective}-bit audio with padding.",
+                "Effective $effective-bit",
+                "The lowest ${declared - effective} bits are always zero, so this is $effective-bit audio with padding.",
             )
             else -> SpectrumHint(
                 HintSeverity.INFO,
                 "Full bit depth",
-                "The samples use all $decoded bits, so the file has the full bit-depth resolution.",
+                "The samples use all $declared bits, so the file has the full bit-depth resolution.",
             )
         }
     }

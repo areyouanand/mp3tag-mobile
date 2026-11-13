@@ -238,6 +238,9 @@ object TagEngine {
                         af.convertID3Tag(current, want)
                     }
                     af.setID3v2Tag(newTag)
+                    // MP3File.setID3v2Tag() only updates its id3v2tag field; AudioFile.tag
+                    // would still point at the converted tag and swallow later edits.
+                    af.setTag(newTag)
                 }
             }
 

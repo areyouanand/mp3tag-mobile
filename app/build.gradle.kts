@@ -12,9 +12,10 @@ android {
         applicationId = "com.mp3tag.mobile"
         minSdk = 31          // Android 12
         targetSdk = 36
-        versionCode = 24
-        versionName = "0.6.3"
+        versionCode = 25
+        versionName = "0.7.0"
         base.archivesName.set("mp3tag-mobile-v$versionName")
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     // Shared debug keystore so local and CI builds are inter-installable
@@ -69,4 +70,7 @@ dependencies {
     implementation("net.jthink:jaudiotagger:3.0.1")
 
     testImplementation("junit:junit:4.13.2")
+
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test:runner:1.6.2")
 }

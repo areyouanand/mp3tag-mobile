@@ -19,7 +19,7 @@ Single user, sideloaded, never going to the Play Store.
   - **WMA / ASF** (`.wma`/`.asf`)
   - **APE** (Monkey's Audio `.ape`) & **WavPack** (`.wv`) via APEv2 (`APETAGEX`)
   - **DSF** (DSD) & **DFF** (DSDIFF `.dff`, embedded `"ID3 "` chunk in `"FRM8"`, ID3v2.3 / ID3v2.4 selectable)
-- versionName 0.6.3 / versionCode 24 (v0.1.0 phase 1, v0.2.1 phase 2, v0.2.2 adaptive UI + hardware scaling, v0.3.0 Home grid + File Manager + Automate, v0.3.1 folder selection + versioned APK/releases, v0.3.2 Theme Screen mode & Design language selector, v0.3.3 roadmap cleanup, v0.4.0 Phase 3 extended audio formats, v0.4.1 audio format conversion added to roadmap, v0.4.2 browser folder summary + in-place tag write fix for DFF/APE, v0.5.0 spectrum analysis, v0.5.1 bit-depth check, v0.5.2 unsaved-edit persistence + undo/redo + per-file edit + kept-values report, v0.5.3–0.6.3 free-form custom fields + ReplayGain matching Tag Editor UX + existing RG detection/skip/remove + Opus R128 + iPod/iTunes Cover Flow Home + in-app File Manager for Spectrum analysis + expanded Settings with Update checker, Release/Beta channel selector, Developer `@areyouanand` Vision credit & GitHub links)
+- versionName 0.7.0 / versionCode 25 (v0.1.0 phase 1, v0.2.1 phase 2, v0.2.2 adaptive UI + hardware scaling, v0.3.0 Home grid + File Manager + Automate, v0.3.1 folder selection + versioned APK/releases, v0.3.2 Theme Screen mode & Design language selector, v0.3.3 roadmap cleanup, v0.4.0 Phase 3 extended audio formats, v0.4.1 audio format conversion added to roadmap, v0.4.2 browser folder summary + in-place tag write fix for DFF/APE, v0.5.0 spectrum analysis, v0.5.1 bit-depth check, v0.5.2 unsaved-edit persistence + undo/redo + per-file edit + kept-values report, v0.5.3–0.6.3 free-form custom fields + ReplayGain matching Tag Editor UX + existing RG detection/skip/remove + Opus R128 + iPod/iTunes Cover Flow Home + in-app File Manager for Spectrum analysis + expanded Settings with Update checker, Release/Beta channel selector, Developer `@areyouanand` Vision credit & GitHub links, **v0.7.0 FFmpeg-based audio format conversion**)
 
 ## Locked-in product decisions (do not silently change)
 
@@ -44,7 +44,7 @@ Single user, sideloaded, never going to the Play Store.
    forks must not imply endorsement by, or affiliation with, the original Mp3tag (mp3tag.de)
    or its author.
 
-## Current state (v0.6.3 beta — v0.4.1 and older verified on the device; v0.5.4–0.6.3 installed on DX270)
+## Current state (v0.7.0 beta — v0.6.3 and older verified on the device; v0.7.0 verified on the emulator)
 
 **Recent additions (v0.5.2–0.6.3)**:
 - **Unsaved edit cache persistence** (`EditorDraftStore`): SHA-256-keyed draft in cache dir survives process death / app kill; cleared on discard or when no edits remain after save.
@@ -52,27 +52,62 @@ Single user, sideloaded, never going to the Play Store.
 - **Per-file editing from batch screen**: files sheet has an "Edit" button per file opening a single-file editor session.
 - **Kept pending edits report**: save outcomes dialog lists files whose pending edits were retained (excluded files).
 - **Free-form custom fields**: `WriteRequest.customFields` and `TagEngine.readCustomFields` read/write ID3 `TXXX` frames (`Id3CustomFields`, including WAV/AIFF inner ID3 tags), VorbisComment arbitrary keys, OpusTags, APEv2 items, and DFF ID3 chunks.
-- **ReplayGain loudness tagging** (`data/replaygain/LoudnessAnalyzer.kt`, `ui/replaygain/ReplayGainScreen.kt`): reuses `BrowserScreen` for selecting folders/files, then opens a Tag-Editor-style analysis & tagging screen with top scan progress banner, dropdown `ModalBottomSheet` selector for Track gain / Album gain / Opus R128 (`R128_TRACK_GAIN` & `R128_ALBUM_GAIN` Q7.8 at -23 LUFS, enabled only when `.opus` files are present), existing ReplayGain tag detection, "Skip files that already have ReplayGain", and "Remove ReplayGain tags".
+- **ReplayGain loudness tagging** (`data/replaygain/LoudnessAnalyzer.kt`, `ui/replaygain/ReplayGainScreen.kt`): reuses `BrowserScreen` for selecting folders/files, then opens a Tag-Editor-style analysis & tagging screen with top scan progress banner, dropdown `ModalBottomSheet` selector for Track gain / Album gain / Opus R128 (`R128_TRACK_GAIN` & `R128_ALBUM_GAIN` Q7.8 at -23 LUFS, enabled only when `.opus` files are present), existing ReplayGain tag detection, "Skip files that already have ReplayGain", and "Remove ReplayGain tags". Since v0.7.0 it decodes through `FfmpegPcmReader`, so DSD/APE/WavPack files are analysed too (MediaCodec is only a fallback). Note the loudness maths is still the original approximation: a first-order high-pass + 1.5× gain instead of true BS.1770 K-weighting, and no gating or true-peak oversampling.
 - **Home iPod / iTunes Cover Flow** (`ui/home/HomeScreen.kt`): orientation-aware 3D Cover Flow carousel (`rememberSnapFlingBehavior`, overlapping `zIndex` stacks, ~54°/58° inward perspective, glossy album-sleeve gradient + diagonal glass sheen + stage reflection, vertical scroll in portrait and horizontal in landscape) with virtual infinite scroll (2000× tiles).
 - **Spectrum analysis uses in-app File Manager** (`ui/spectrum/SpectrumScreen.kt`, `ui/filemanager/FileManagerScreen.kt`): replaced the system SAF document picker with the in-app `FileManagerScreen` (one-tap audio file analysis, plus "Analyze in Spectrum analysis" from the main File Manager).
 - **Expanded Settings & Update Checker** (`ui/settings/SettingsScreen.kt`, `data/update/UpdateChecker.kt`): ReplayGain defaults (Opus R128 default & skip already-tagged default), File Manager `.dot` hidden-files toggle, history/cache clear buttons (recent folders, saved patterns, unsaved editor drafts), **Updates** section with `Release (Stable)` vs `Beta (Prerelease)` channel selector + live GitHub Releases update checker & APK download, **Developer** section (`@areyouanand` — Vision), and **About** section with clickable GitHub repository & releases links.
 
-**Spectrum analysis** (v0.5.0, bit-depth check v0.5.1, in-app File Manager v0.6.2; `data/spectrum/`, `ui/spectrum/`, Home tile):
-- `PcmDecoder`: decodes a 60 s window from the middle of a file to mono float with MediaExtractor +
-  MediaCodec, picked through the in-app `FileManagerScreen` (`java.io.File`). Works only for formats Android can decode
-  (MP3, AAC, FLAC, Opus, Vorbis, and PCM WAV if the device has a decoder). DSD, APE and WavPack are
-  refused with a message.
+**Audio format conversion** (v0.7.0; `data/convert/`, `ui/convert/`, `native/`, Home tile "Convert"):
+- Home → **Convert** reuses `BrowserScreen` for selection, then shows a setup screen: target
+  format, bitrate (lossy), sample rate, channels, 16/24-bit PCM depth (WAV/AIFF), keep-tags
+  toggle, delete-original toggle, a running progress card with cancel, and a results sheet.- Targets: MP3 (libmp3lame), FLAC, M4A/AAC, M4A/ALAC, Opus (libopus, forced 48 kHz), Ogg Vorbis
+  (FFmpeg's native experimental encoder), WAV/AIFF PCM, WMA (wmav2), WavPack. Inputs: anything
+  FFmpeg can demux plus `.dff` through the in-house DSDIFF reader.
+- Engine: `FfmpegBridge` (JNI) → `native/ffmpeg_jni.c` → statically linked **LGPL FFmpeg 8.0.3 +
+  LAME 3.100 + libopus 1.5.2**. `libmp3tagffmpeg.so` is committed per ABI (arm64-v8a, x86_64) in
+  `app/src/main/jniLibs/`, so Gradle and CI need no NDK step. Rebuild with
+  `native/build-ffmpeg.sh` + `native/build.sh` (see `native/README.md`).
+- Conversion is sequential (one decode+encode at a time), reports 0–100 % per file through a JNI
+  callback every 200 ms, and `nativeCancel()` aborts between packets. Output never overwrites:
+  collisions become `name (converted).ext` / `name (converted 2).ext`.
+- Tags are copied after the audio write through `TagEngine` (all fields → core fields →
+  title/artist/album fallback) including embedded cover art. Free-form custom fields and
+  ReplayGain tags are NOT copied yet. New files are written next to the originals.
+- Tag/cover copying revealed and fixed a latent JAudioTagger bug: `MP3File.setID3v2Tag()` does not
+  update `AudioFile.tag`, so the first write after an ID3v2.3↔v2.4 conversion silently dropped every
+  field. `TagEngine.ensureTag()` now also calls `af.setTag(newTag)` after `setID3v2Tag(newTag)`.
+- Cover art is written in a second pass so a format that cannot embed artwork still gets its tags.
+  FLAC is such a format on Android: JAudioTagger's `AndroidArtwork.setImageFromData()` throws
+  `UnsupportedOperationException`, so the conversion reports "Cover art not copied" for FLAC.
+- FFmpeg 8 dropped its DSDIFF demuxer, so `ffmpeg_jni.c` parses `FRM8` / `PROP` (`FS`, `CHNL`)
+  itself and feeds the interleaved MSB-first `DSD ` payload to the `dsd_msbf` decoder; `.dsf`
+  uses FFmpeg's own demuxer. DST-compressed `.dff` files are refused with a message.
+- Instrumented coverage: `app/src/androidTest/.../AudioConverterInstrumentedTest.kt`
+  (`./gradlew connectedDebugAndroidTest`) converts generated WAV/DFF sources to MP3, FLAC, M4A,
+  Opus and 24-bit WAV and checks container magic bytes. JVM tests cover option normalisation and
+  output naming (`app/src/test/.../data/convert/ConversionOptionsTest.kt`).
+
+**Spectrum analysis** (v0.5.0, bit-depth check v0.5.1, in-app File Manager v0.6.2, FFmpeg decoding v0.7.0; `data/spectrum/`, `data/audio/`, `ui/spectrum/`, Home tile):
+- `PcmDecoder` decodes a 60 s window from the middle of a file to mono float. Since v0.7.0 it uses the
+  bundled FFmpeg decoder (`data/audio/FfmpegPcmReader.kt` → `FfmpegBridge.nativeDecodeOpen/Read`), so
+  **every supported format works — including DSD (`.dsf`/`.dff`), Monkey's Audio (`.ape`), WavPack
+  (`.wv`), AIFF and WMA** — at the file's native sample rate. MediaExtractor/MediaCodec remains only as
+  a fallback for `content://` URIs and when the native library is missing.
+  High sample rates are capped at 8 M decoded samples (~32 MB): a 352.8 kHz DSD file analyses ~22 s
+  instead of 60 s, everything at ≤192 kHz keeps the full window.
 - `Fft` (radix-2, Hann window, 4096 points) → averaged spectrum, smoothed ±7 bins, and a 480×256 spectrogram.
 - `SpectrumAnalyzer`: reference level = median of 1–8 kHz; "top of sound" (cutoff) = highest bin above
   reference − 60 dB, unless the 0.9·Nyquist–Nyquist region is also above that (then full band).
   Hints: likely upsampled (≥88.2 kHz file, content stops at 20.5–22.6 kHz → 44.1 origin, 22.6–24.6 kHz → 48 kHz origin),
   lossy-looking lowpass (16 kHz / 19 kHz / 20 kHz bands; lossless container → WARNING), real content above 22 kHz,
   no lowpass, too quiet.
-- `BitDepth`: OR of all decoded integer samples; trailing zero bits = padding. Only claims padding when the
-  decoder delivers ≥24-bit (`BitStats`). If the device decodes to 16-bit, the hint is "Bit depth not verifiable".
-  `ContainerProbe` reads bit depth from the FLAC STREAMINFO and WAV fmt headers.
-- Thresholds were checked only with synthetic signals (`app/src/test/.../spectrum/`, 10 JVM tests). They still
-  need calibration on real CD, hi-res, and MP3 files, and on the DX270's MediaCodec output.
+- `BitDepth`: OR of all decoded integer samples; trailing zero bits = padding. The FFmpeg path computes the
+  OR natively (`ds_accumulate_stats`) and reports the decoder's real word width, so `decodedBits` can be
+  32-bit even for a 24-bit file — hints compare against `containerBits` (FLAC/WAV headers via
+  `ContainerProbe`, otherwise the codec's declared `bits_per_raw_sample`). Float/DSD output leaves the
+  check disabled ("not verifiable").
+- Thresholds were checked only with synthetic signals (`app/src/test/.../spectrum/`). They still
+  need calibration on real CD, hi-res, and MP3 files.
 
 
 
@@ -164,6 +199,15 @@ mixed-cover detection. Section sits at the bottom of the editor (user requested)
 - **`DropdownMenu`/popups DO NOT RENDER on the iBasso DX270's ROM** — taps land but no popup
   window is ever created (verified via `dumpsys window`). Always use `ModalBottomSheet`;
   AlertDialog works fine too. This bit us twice.
+- **The bundled FFmpeg build is LGPL-only and its `.so` is committed**: keep
+  `native/build-ffmpeg.sh` at `--disable-gpl --disable-nonfree --disable-version3`; MP3 encoding
+  needs libmp3lame, Opus needs libopus and `--pkg-config="pkg-config --static"` (libopus.pc needs
+  `-lm` for its link check). arm64 only links with `-fvisibility=hidden` (the aarch64 `tx_float`
+  NEON asm otherwise emits non-PIC relocations). The JNI `.so` is linked with
+  `-Wl,-z,max-page-size=16384` for 16 KB page-size devices. Re-run `native/build.sh` after editing
+  `ffmpeg_jni.c` and commit the refreshed binaries — CI never builds native code.
+- **FFmpeg's `dsd_msbf` decoder expects interleaved MSB-first bytes** (one output sample per input
+  byte at `fs/8`). Do not switch the DFF path to `dsd_msbf_planar` without de-interleaving first.
 - **material3 1.4.0 stable marks all Expressive APIs (MaterialExpressiveTheme, MotionScheme,
   LoadingIndicator) `internal`**. The project therefore pins **material3 1.5.0-alpha01**.
   Do NOT bump to 1.5.0-beta01 blindly: it pulls Compose UI 1.12 → requires AGP 9.1+ and
@@ -174,6 +218,12 @@ mixed-cover detection. Section sits at the bottom of the editor (user requested)
   `ArtworkFactory.getNew()` with `TagOptionSingleton.getInstance().isAndroid = true` set once
   (no java.awt on Android). WAV has no per-chunk write flags in 3.0.1 — it always writes both
   ID3 and INFO chunks (matches MP3Tag default; the old WavTagMode setting was removed because of this).
+- **`MP3File.setID3v2Tag()` only updates its private `id3v2tag` field**; `AudioFile.tag` keeps pointing
+  at the old tag, so fields set on `af.tag` right after an ID3 version conversion are silently dropped
+  on commit. `TagEngine.ensureTag()` therefore calls `af.setTag(newTag)` as well. Do not remove it.
+- **FLAC cover art cannot be written through JAudioTagger on Android**:
+  `AndroidArtwork.setImageFromData()` is unimplemented and throws. Tags still write; the converter
+  surfaces "Cover art not copied" for FLAC (a custom FLAC PICTURE-block writer would fix it).
 - **`AudioFileIO.read` on a file whose format's reader can throw KeyNotFoundException for
   unsupported FieldKeys** — every `getFirst()` must be wrapped in runCatching. Unsupported keys
   set in `setField` fail per-file and surface in the save-results dialog (acceptable).
@@ -192,6 +242,11 @@ mixed-cover detection. Section sits at the bottom of the editor (user requested)
   `areyouanand` (token in Windows keyring, scopes incl. repo+workflow; re-auth via
   `gh auth login`/`gh auth refresh -s workflow` device flow if it ever lapses)
 - `local.properties` holds `sdk.dir` (git-ignored, machine-specific)
+- **MSYS2 (portable, no admin): `%LOCALAPPDATA%\mp3tag-tooling\msys64`** — bash/make/nasm/gcc for
+  the FFmpeg cross-build. FFmpeg sources in `%LOCALAPPDATA%\mp3tag-tooling\src`, build trees in
+  `...\build`, static libs in `...\out` (`ffmpeg/<abi>`, `lame/<abi>`, `opus/<abi>`).
+- Current machine SDK/NDK (this box): `C:\Android\Sdk` with NDK `28.2.13676358`; `local.properties`
+  must point at it or Gradle fails with "SDK location not found".
 - Build: `$env:JAVA_HOME = "<JDK above>"; $env:ANDROID_HOME = "<SDK above>"; .\gradlew.bat assembleDebug`
 - Install/launch on device: `adb install -r <apk>` → `adb shell am start -n com.mp3tag.mobile/.MainActivity`
 
@@ -231,19 +286,26 @@ mixed-cover detection. Section sits at the bottom of the editor (user requested)
   - `data/prefs/AppPrefs.kt` — settings, update channel (`RELEASE` / `BETA`), ReplayGain defaults, recent folders, last folders (`lastFolder` + `lastFileManagerFolder`), `showHiddenFiles`, saved patterns
   - `data/update/UpdateChecker.kt` — live GitHub Releases API checker (`Release` vs `Beta` channel), semantic version & build number comparison, APK asset extraction
   - `data/replaygain/LoudnessAnalyzer.kt` — MediaCodec PCM loudness & peak scanner (`-18 LUFS` target)
+  - `data/convert/` (`FfmpegBridge.kt` JNI, `ConversionOptions.kt` target enum/settings, `AudioConverter.kt` batch engine + tag copy) — FFmpeg-backed transcoder
+  - `native/` (`ffmpeg_jni.c`, `build-ffmpeg.sh`, `build.sh`, `README.md`) — JNI wrapper plus the reproducible LGPL FFmpeg/LAME/libopus cross-build; outputs `app/src/main/jniLibs/<abi>/libmp3tagffmpeg.so`
   - `data/spectrum/` (`PcmDecoder.kt`, `Fft.kt`, `SpectrumAnalyzer.kt`, `BitDepth.kt`) — 60 s midpoint decode, 4096-pt Hann FFT, spectrogram & cutoff/bit-depth analysis
   - `data/tag/TagData.kt`, `TagEngine.kt`, `Id3CustomFields.kt`, `DffTagHandler.kt`, `OpusTagHandler.kt`, `ApeTagHandler.kt`, `SafeWrite.kt` — models, JAudioTagger engine, custom field readers/writers, and custom DFF/Opus/APEv2 binary handlers
   - `ui/home/` (`HomeScreen`), `ui/filemanager/` (`FileManagerScreen`, `FileManagerViewModel`),
     `ui/spectrum/` (`SpectrumScreen`, `SpectrumViewModel`), `ui/replaygain/` (`ReplayGainScreen`),
+    `ui/convert/` (`ConvertScreen`, `ConvertViewModel`),
     `ui/automate/` (`AutomateScreen`), `ui/browser/`, `ui/editor/` (`EditorScreen`, `EditorViewModel`,
     `EditorDraftStore`, `ToolsDialogs`), `ui/settings/` (`SettingsScreen`), `ui/common/` (`Common.kt`, `AdaptiveLayout.kt`),
     `ui/theme/Theme.kt` (M3 Expressive, Material You, Liquid Glass, Halo), `util/` (`DeviceProfile.kt`, `Format.kt` + `ImageDecode`,
     `PatternParser.kt`)
-- Unit tests in `app/src/test/.../spectrum/`; verification = `./gradlew assembleDebug testDebugUnitTest` + install on device + uiautomator checks.
+- Unit tests in `app/src/test/.../` (`spectrum/`, `data/convert/`); instrumentation tests in
+  `app/src/androidTest/.../data/convert/`. Verification = `./gradlew assembleDebug testDebugUnitTest`
+  + `connectedDebugAndroidTest` on the emulator + install on device + uiautomator checks.
 
 ## Roadmap
 
-- **Audio format conversion** (blocked, not started in the repo): the prebuilt FFmpegKit binaries were removed from Maven Central and GitHub (only source remains). Plan: build LGPL FFmpeg from the archived ffmpeg-kit source with the NDK, which needs WSL Ubuntu or MSYS2 with make/nasm/pkg-config. This machine has neither yet. A MediaCodec-only fallback was also discussed. It can't output MP3 or decode DSD/APE/WavPack. Goal: convert/transcode audio files between formats (e.g. FLAC/WAV/DSD/APE/WV ↔ MP3/Opus/M4A/FLAC/WAV) while preserving metadata tags and embedded cover art.
+- **Audio format conversion** — **done in v0.7.0** (FFmpeg-based, see above). Remaining follow-ups:
+  output-folder picker, per-file format overrides, copying free-form custom fields / ReplayGain
+  tags, and optional parallel batches on high-end devices.
 - **Phase 3 remaining**: MusicBrainz + Cover Art Archive + Discogs online metadata and cover lookup.
 - **Automate workspace**: user requested the `Automate` section on the Home grid as a placeholder to be populated with automated tagging/file workflows in a future session.
 - Larger libraries: WorkManager for background batch saves, paging for file list.
