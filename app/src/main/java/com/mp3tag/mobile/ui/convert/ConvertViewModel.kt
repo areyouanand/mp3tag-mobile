@@ -22,15 +22,19 @@ import kotlinx.coroutines.launch
  */
 class ConvertViewModel(application: Application) : AndroidViewModel(application) {
 
+    enum class ConvertPhase { IDLE, RUNNING, CANCELLING, FINISHED }
+
     data class UiState(
         val settings: ConvertSettings = ConvertSettings(),
-        val running: Boolean = false,
+        val phase: ConvertPhase = ConvertPhase.IDLE,
         val progress: ConversionProgress? = null,
         val outcome: ConversionOutcome? = null,
         val totalFiles: Int = 0,
-        val cancelRequested: Boolean = false,
         val lastPaths: List<String> = emptyList(),
-    )
+    ) {
+        val running: Boolean get() = phase == ConvertPhase.RUNNING || phase == ConvertPhase.CANCELLING
+        val cancelRequested: Boolean get() = phase == ConvertPhase.CANCELLING
+    }
 
     private val prefs = AppPrefs(application)
 
@@ -77,11 +81,10 @@ class ConvertViewModel(application: Application) : AndroidViewModel(application)
         if (paths.isEmpty() || _state.value.running) return
         val settings = _state.value.settings
         _state.value = _state.value.copy(
-            running = true,
+            phase = ConvertPhase.RUNNING,
             progress = ConversionProgress(0, paths.size, "", 0),
             outcome = null,
             totalFiles = paths.size,
-            cancelRequested = false,
             lastPaths = paths,
         )
         job = viewModelScope.launch {
@@ -92,23 +95,27 @@ class ConvertViewModel(application: Application) : AndroidViewModel(application)
                 onProgress = { progress ->
                     _state.value = _state.value.copy(progress = progress)
                 },
-                shouldCancel = { _state.value.cancelRequested },
+                shouldCancel = { _state.value.phase == ConvertPhase.CANCELLING },
             )
             _state.value = _state.value.copy(
-                running = false,
+                phase = ConvertPhase.FINISHED,
                 outcome = outcome,
-                cancelRequested = false,
             )
         }
     }
 
     fun cancel() {
-        _state.value = _state.value.copy(cancelRequested = true)
+        if (_state.value.phase != ConvertPhase.RUNNING) return
+        _state.value = _state.value.copy(phase = ConvertPhase.CANCELLING)
         FfmpegBridge.cancel()
     }
 
     fun clearOutcome() {
-        _state.value = _state.value.copy(outcome = null, progress = null)
+        _state.value = _state.value.copy(
+            phase = ConvertPhase.IDLE,
+            outcome = null,
+            progress = null,
+        )
     }
 
     /** Keeps the conversion going if the screen is left; nothing to cancel here. */

@@ -27,6 +27,7 @@ class FfmpegPcmReader private constructor(
 ) : Closeable {
 
     private var closed = false
+    private var eof = false
 
     /** 16/32/64 when the decoder delivers integer PCM, 0 for float/DSD. */
     val integerWidth: Int get() = info()[4].toInt()
@@ -38,9 +39,13 @@ class FfmpegPcmReader private constructor(
 
     /** Up to [maxSamples] mono samples, or null at the end of the stream. */
     fun read(maxSamples: Int): FloatArray? {
-        if (closed || maxSamples <= 0) return null
+        if (closed || eof || maxSamples <= 0) return null
         val chunk = FfmpegBridge.decodeRead(handle, maxSamples) ?: return null
-        return if (chunk.isEmpty()) null else chunk
+        if (chunk.isEmpty()) {
+            eof = true
+            return null
+        }
+        return chunk
     }
 
     override fun close() {

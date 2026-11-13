@@ -39,6 +39,7 @@ class SpectrumViewModel(application: Application) : AndroidViewModel(application
     /** Small in-memory cache keyed by path + mtime + window. */
     private data class Cached(
         val modified: Long,
+        val size: Long,
         val windowSeconds: Double,
         val report: SpectrumReport,
         val bitmap: ImageBitmap,
@@ -55,7 +56,9 @@ class SpectrumViewModel(application: Application) : AndroidViewModel(application
         val name = file.name.ifBlank { "audio file" }
         val path = file.absolutePath
         val cached = cache[path]
-        if (cached != null && cached.modified == file.lastModified() && cached.windowSeconds == windowSeconds) {
+        if (cached != null && cached.modified == file.lastModified() &&
+            cached.size == file.length() && cached.windowSeconds == windowSeconds
+        ) {
             _state.value = SpectrumUiState(
                 filePath = path,
                 fileName = name,
@@ -91,7 +94,7 @@ class SpectrumViewModel(application: Application) : AndroidViewModel(application
                         Bitmap.Config.ARGB_8888,
                     )
                     val image = bitmap.asImageBitmap()
-                    cache[path] = Cached(file.lastModified(), windowSeconds, report, image, diagnostics)
+                    cache[path] = Cached(file.lastModified(), file.length(), windowSeconds, report, image, diagnostics)
                     Triple(report, image, diagnostics)
                 }
             }

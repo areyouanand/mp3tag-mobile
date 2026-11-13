@@ -79,16 +79,12 @@ sealed interface Screen {
     data object FileManager : Screen
     data object Automate : Screen
     data object Convert : Screen
-    data class Spectrum(
-        val initialPath: String? = null,
-        val returnTo: Screen = Home,
-    ) : Screen
+    data class Spectrum(val initialPath: String? = null) : Screen
     data object ReplayGain : Screen
-    data class Settings(val returnTo: Screen = Home) : Screen
+    data object Settings : Screen
     data class Editor(
         val paths: List<String>,
         val session: Int,
-        val returnTo: Screen = Browser,
     ) : Screen
 }
 
@@ -115,6 +111,7 @@ class AppViewModel(application: android.app.Application) : AndroidViewModel(appl
     val performanceMode = _performanceMode.asStateFlow()
 
     private var sessionCounter = 0
+    private val backStack = ArrayDeque<Screen>()
 
     fun recheckPermission() {
         _hasPermission.value = checkPermission()
@@ -123,50 +120,57 @@ class AppViewModel(application: android.app.Application) : AndroidViewModel(appl
     private fun checkPermission(): Boolean =
         android.os.Environment.isExternalStorageManager()
 
+    /** Pushes [destination] onto the back stack (except Home, which resets it). */
+    private fun navigateTo(destination: Screen) {
+        if (destination is Screen.Home) {
+            backStack.clear()
+        } else {
+            backStack.addLast(_screen.value)
+        }
+        _screen.value = destination
+    }
+
     fun openHome() {
+        backStack.clear()
         _screen.value = Screen.Home
     }
 
     fun openTagEditor() {
-        _screen.value = Screen.Browser
+        navigateTo(Screen.Browser)
     }
 
     fun openFileManager() {
-        _screen.value = Screen.FileManager
+        navigateTo(Screen.FileManager)
     }
 
     fun openAutomate() {
-        _screen.value = Screen.Automate
+        navigateTo(Screen.Automate)
     }
 
     fun openConvert() {
-        _screen.value = Screen.Convert
+        navigateTo(Screen.Convert)
     }
 
-    fun openSpectrum(initialPath: String? = null, returnTo: Screen = Screen.Home) {
-        _screen.value = Screen.Spectrum(initialPath = initialPath, returnTo = returnTo)
+    fun openSpectrum(initialPath: String? = null) {
+        navigateTo(Screen.Spectrum(initialPath = initialPath))
     }
 
     fun openReplayGain() {
-        _screen.value = Screen.ReplayGain
+        navigateTo(Screen.ReplayGain)
     }
 
-    fun openEditor(paths: List<String>, returnTo: Screen = Screen.Browser) {
+    fun openEditor(paths: List<String>) {
         sessionCounter += 1
-        _screen.value = Screen.Editor(paths, sessionCounter, returnTo)
+        navigateTo(Screen.Editor(paths, sessionCounter))
     }
 
-    fun openSettings(returnTo: Screen = _screen.value) {
-        _screen.value = Screen.Settings(returnTo)
+    fun openSettings() {
+        navigateTo(Screen.Settings)
     }
 
     fun back() {
-        _screen.value = when (val current = _screen.value) {
-            is Screen.Editor -> current.returnTo
-            is Screen.Settings -> current.returnTo
-            is Screen.Spectrum -> current.returnTo
-            else -> Screen.Home
-        }
+        val previous = if (backStack.isNotEmpty()) backStack.removeLast() else Screen.Home
+        _screen.value = previous
     }
 
     fun setThemeMode(mode: ThemeMode) {
@@ -234,32 +238,32 @@ fun Mp3tagApp(appViewModel: AppViewModel = viewModel()) {
                     onOpenSpectrum = { appViewModel.openSpectrum() },
                     onOpenReplayGain = appViewModel::openReplayGain,
                     onOpenAutomate = appViewModel::openAutomate,
-                    onOpenSettings = { appViewModel.openSettings(Screen.Home) },
+                    onOpenSettings = { appViewModel.openSettings() },
                 )
 
                 is Screen.Spectrum -> SpectrumScreen(
                     onBack = appViewModel::back,
-                    onEditAudioTags = { paths -> appViewModel.openEditor(paths, current) },
+                    onEditAudioTags = { paths -> appViewModel.openEditor(paths) },
                     initialFilePath = current.initialPath,
                     fileManagerViewModel = fileManagerVm,
                 )
 
                 Screen.ReplayGain -> ReplayGainScreen(
-                    onBack = appViewModel::openHome,
-                    onOpenSettings = { appViewModel.openSettings(Screen.ReplayGain) },
+                    onBack = appViewModel::back,
+                    onOpenSettings = { appViewModel.openSettings() },
                 )
 
                 Screen.Browser -> BrowserScreen(
                     onBackHome = appViewModel::openHome,
-                    onEditFiles = { paths -> appViewModel.openEditor(paths, Screen.Browser) },
-                    onOpenSettings = { appViewModel.openSettings(Screen.Browser) },
+                    onEditFiles = { paths -> appViewModel.openEditor(paths) },
+                    onOpenSettings = { appViewModel.openSettings() },
                     viewModel = browserVm,
                 )
 
                 Screen.FileManager -> FileManagerScreen(
                     onBackHome = appViewModel::openHome,
-                    onEditAudioTags = { paths -> appViewModel.openEditor(paths, Screen.FileManager) },
-                    onAnalyzeSpectrum = { path -> appViewModel.openSpectrum(path, Screen.FileManager) },
+                    onEditAudioTags = { paths -> appViewModel.openEditor(paths) },
+                    onAnalyzeSpectrum = { path -> appViewModel.openSpectrum(path) },
                     viewModel = fileManagerVm,
                 )
 
@@ -269,7 +273,7 @@ fun Mp3tagApp(appViewModel: AppViewModel = viewModel()) {
 
                 Screen.Convert -> ConvertScreen(
                     onBack = appViewModel::openHome,
-                    onOpenSettings = { appViewModel.openSettings(Screen.Convert) },
+                    onOpenSettings = { appViewModel.openSettings() },
                 )
 
                 is Screen.Editor -> EditorScreen(
@@ -285,7 +289,7 @@ fun Mp3tagApp(appViewModel: AppViewModel = viewModel()) {
                         fileManagerVm.refresh()
                     },
                     onOpenSingleFile = { path ->
-                        appViewModel.openEditor(listOf(path), current.returnTo)
+                        appViewModel.openEditor(listOf(path))
                     },
                 )
 
@@ -306,9 +310,8 @@ fun Mp3tagApp(appViewModel: AppViewModel = viewModel()) {
                 )
             }
 
-            BackHandler(
-                enabled = screen is Screen.Settings || screen is Screen.Automate ||
-                    screen is Screen.Spectrum || screen is Screen.Convert
+            BackHandler(enabled = screen is Screen.Settings || screen is Screen.Automate ||
+                screen is Screen.Spectrum || screen is Screen.Convert
             ) {
                 if (screen is Screen.Settings) {
                     browserVm.reloadPrefs()

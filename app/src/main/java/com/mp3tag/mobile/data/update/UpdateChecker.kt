@@ -28,8 +28,8 @@ data class UpdateCheckResult(
 )
 
 object UpdateChecker {
-    const val CURRENT_VERSION_NAME = "0.8.0"
-    const val CURRENT_VERSION_CODE = 27
+    const val CURRENT_VERSION_NAME = "0.8.1"
+    const val CURRENT_VERSION_CODE = 28
 
     const val GITHUB_REPO_URL = "https://github.com/areyouanand/mp3tag-mobile"
     const val GITHUB_RELEASES_URL = "https://github.com/areyouanand/mp3tag-mobile/releases"

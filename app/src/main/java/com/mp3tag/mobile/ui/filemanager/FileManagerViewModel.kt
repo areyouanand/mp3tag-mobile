@@ -73,6 +73,14 @@ data class FileDetailsInfo(
     val sha256: String? = null,
 )
 
+sealed interface FileOperation {
+    data object Idle : FileOperation
+    data class Running(
+        val message: String,
+        val cancellable: Boolean = true,
+    ) : FileOperation
+}
+
 data class FileManagerState(
     val directory: File = Environment.getExternalStorageDirectory(),
     val entries: List<FileEntry> = emptyList(),
@@ -82,15 +90,17 @@ data class FileManagerState(
     val showHidden: Boolean = false,
     val clipboard: FileClipboard? = null,
     val loading: Boolean = false,
-    val busyMessage: String? = null,
+    val operation: FileOperation = FileOperation.Idle,
     val statusMessage: String? = null,
     val error: String? = null,
     val recents: List<String> = emptyList(),
     val volumes: List<StorageVolumeInfo> = emptyList(),
     val detailsInfo: FileDetailsInfo? = null,
     val collisionPolicy: CollisionPolicy = CollisionPolicy.KEEP_BOTH,
-    val busyCancellable: Boolean = false,
-)
+) {
+    val busyMessage: String? get() = (operation as? FileOperation.Running)?.message
+    val busyCancellable: Boolean get() = (operation as? FileOperation.Running)?.cancellable == true
+}
 
 class FileManagerViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -300,7 +310,7 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
             }
 
             _state.update {
-                it.copy(busyMessage = "$verb 0 / $total item(s)…", busyCancellable = true)
+                it.copy(operation = FileOperation.Running("$verb 0 / $total item(s)…"))
             }
 
             var okCount = 0
@@ -311,7 +321,7 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
             withContext(Dispatchers.IO) {
                 for ((index, srcPath) in clip.sourcePaths.withIndex()) {
                     if (cancelRequested) break
-                    _state.update { it.copy(busyMessage = "$verb ${index + 1} / $total: ${File(srcPath).name}") }
+                    _state.update { it.copy(operation = FileOperation.Running("$verb ${index + 1} / $total: ${File(srcPath).name}")) }
                     val src = File(srcPath)
                     var skipped = false
                     val res = runCatching {
@@ -340,8 +350,9 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
                                         val pct = (copied * 100 / totalBytes).toInt()
                                         _state.update {
                                             it.copy(
-                                                busyMessage =
+                                                operation = FileOperation.Running(
                                                     "$verb ${index + 1} / $total: ${src.name} ($pct%)",
+                                                ),
                                             )
                                         }
                                     }
@@ -372,8 +383,7 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
 
             _state.update {
                 it.copy(
-                    busyMessage = null,
-                    busyCancellable = false,
+                    operation = FileOperation.Idle,
                     clipboard = if (clip.mode == ClipboardMode.MOVE && failCount == 0 && !cancelled) null else it.clipboard,
                     statusMessage = summary,
                 )
@@ -444,13 +454,13 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
         cancelRequested = false
         val targets = paths.toList()
         viewModelScope.launch {
-            _state.update { it.copy(busyMessage = "Deleting ${targets.size} item(s)…", busyCancellable = true) }
+            _state.update { it.copy(operation = FileOperation.Running("Deleting ${targets.size} item(s)…")) }
             var deleted = 0
             var failed = 0
             withContext(Dispatchers.IO) {
                 targets.forEachIndexed { idx, path ->
                     if (cancelRequested) return@forEachIndexed
-                    _state.update { it.copy(busyMessage = "Deleting ${idx + 1} / ${targets.size}…") }
+                    _state.update { it.copy(operation = FileOperation.Running("Deleting ${idx + 1} / ${targets.size}…")) }
                     val file = File(path)
                     val ok = runCatching { file.deleteRecursively() }.getOrDefault(false)
                     if (ok || !file.exists()) deleted += 1 else failed += 1
@@ -458,8 +468,7 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
             }
             _state.update {
                 it.copy(
-                    busyMessage = null,
-                    busyCancellable = false,
+                    operation = FileOperation.Idle,
                     selectedPaths = emptySet(),
                     statusMessage = if (failed == 0) {
                         if (cancelRequested) "Cancelled — deleted $deleted item(s)" else "Deleted $deleted item(s)"
@@ -482,13 +491,13 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
         cancelRequested = false
         val targets = paths.toList()
         viewModelScope.launch {
-            _state.update { it.copy(busyMessage = "Moving to trash…", busyCancellable = true) }
+            _state.update { it.copy(operation = FileOperation.Running("Moving to trash…")) }
             var moved = 0
             var failed = 0
             withContext(Dispatchers.IO) {
                 targets.forEachIndexed { idx, path ->
                     if (cancelRequested) return@forEachIndexed
-                    _state.update { it.copy(busyMessage = "Moving to trash ${idx + 1} / ${targets.size}…") }
+                    _state.update { it.copy(operation = FileOperation.Running("Moving to trash ${idx + 1} / ${targets.size}…")) }
                     val src = File(path)
                     val ok = runCatching {
                         val parent = src.parentFile ?: error("No parent folder")
@@ -505,8 +514,7 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
             }
             _state.update {
                 it.copy(
-                    busyMessage = null,
-                    busyCancellable = false,
+                    operation = FileOperation.Idle,
                     selectedPaths = emptySet(),
                     statusMessage = if (failed == 0) {
                         "Moved $moved item(s) to .mp3tag-trash"

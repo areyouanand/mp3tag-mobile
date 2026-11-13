@@ -12,7 +12,7 @@
 A personal-use Android audio tag editor and file manager that mirrors the workflow of [MP3Tag](https://www.mp3tag.de) for
 Windows, built with Kotlin, Jetpack Compose, and **Material 3 Expressive**.
 
-- Latest stable release: **v0.7.0** · Last beta: **v0.7.1-beta** (`versionCode = 26`) · Local working build: **v0.8.0** (`versionCode = 27`, not yet published)
+- Latest stable release: **v0.8.0** · Local working build: **v0.8.1** (`versionCode = 28`, not yet published)
 - All releases and downloads: **https://github.com/areyouanand/mp3tag-mobile/releases**
 - Minimum Android version: **12 (API 31)**
 - Uses the **All files access** permission (`MANAGE_EXTERNAL_STORAGE`) so it can browse any folder
@@ -22,16 +22,17 @@ Windows, built with Kotlin, Jetpack Compose, and **Material 3 Expressive**.
 
 | Channel | Version | Link |
 |---|---|---|
-| Stable (Latest) | v0.7.0 | [Latest release](https://github.com/areyouanand/mp3tag-mobile/releases/latest) |
-| Beta (prerelease) | v0.7.1-beta | [v0.7.1-beta](https://github.com/areyouanand/mp3tag-mobile/releases/tag/v0.7.1-beta) |
+| Stable (Latest) | v0.8.0 | [Latest release](https://github.com/areyouanand/mp3tag-mobile/releases/latest) |
+| Beta (prerelease) | v0.8.0-beta | [v0.8.0-beta](https://github.com/areyouanand/mp3tag-mobile/releases/tag/v0.8.0-beta) |
 | All releases | | [releases](https://github.com/areyouanand/mp3tag-mobile/releases) |
 
 Install the APK that matches your device from a release's **Assets** — `arm64-v8a` for phones and DAPs (almost always this one) and `x86_64` only for Android emulators. Beta builds may still have bugs.
 
-## Current status — v0.8.0 (local build)
+## Current status — v0.8.1 (local build)
 
 | Feature | State |
 |---|---|
+| **Explicit state machines**: navigation back stack, editor load/save/cover phases, conversion phase, file-manager operation state, ReplayGain scan cache + cancellable save | ✅ v0.8.1 |
 | **Multi-value tags** (separate ARTIST/ALBUM_ARTIST/GENRE/COMPOSER/PERFORMER values) for MP3/FLAC/Ogg/Opus/DSD; APEv2 targets warn because the format is single-valued | ✅ v0.8.0 |
 | **MP4 free-form atoms + ASF attributes** survive conversion, so custom/ReplayGain fields work on `.m4a` and `.wma` too | ✅ v0.8.0 |
 | **WavPack APEv2 cover art** now reads back correctly — all 10 conversion targets keep cover art | ✅ v0.8.0 |

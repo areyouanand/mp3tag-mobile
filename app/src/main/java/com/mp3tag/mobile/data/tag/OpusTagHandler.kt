@@ -321,7 +321,7 @@ internal object OpusTagHandler {
             startingSequence = firstPage.pageSequence + 1,
         )
 
-        val tempFile = File(file.parentFile, ".${file.name}.mp3tag_tmp")
+        val tempFile = File(file.parentFile, ".${file.name}.${System.nanoTime()}.mp3tag_tmp")
         try {
             FileOutputStream(tempFile).use { out ->
                 // 1. Write Page 0 (OpusHead)

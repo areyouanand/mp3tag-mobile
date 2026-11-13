@@ -19,7 +19,7 @@ Single user, sideloaded, never going to the Play Store.
   - **WMA / ASF** (`.wma`/`.asf`)
   - **APE** (Monkey's Audio `.ape`) & **WavPack** (`.wv`) via APEv2 (`APETAGEX`)
   - **DSF** (DSD) & **DFF** (DSDIFF `.dff`, embedded `"ID3 "` chunk in `"FRM8"`, ID3v2.3 / ID3v2.4 selectable)
-- versionName 0.8.0 / versionCode 27 (v0.1.0 phase 1, v0.2.1 phase 2, v0.2.2 adaptive UI + hardware scaling, v0.3.0 Home grid + File Manager + Automate, v0.3.1 folder selection + versioned APK/releases, v0.3.2 Theme Screen mode & Design language selector, v0.3.3 roadmap cleanup, v0.4.0 Phase 3 extended audio formats, v0.4.1 audio format conversion added to roadmap, v0.4.2 browser folder summary + in-place tag write fix for DFF/APE, v0.5.0 spectrum analysis, v0.5.1 bit-depth check, v0.5.2 unsaved-edit persistence + undo/redo + per-file edit + kept-values report, v0.5.3–0.6.3 free-form custom fields + ReplayGain matching Tag Editor UX + existing RG detection/skip/remove + Opus R128 + iPod/iTunes Cover Flow Home + in-app File Manager for Spectrum analysis + expanded Settings with Update checker, Release/Beta channel selector, Developer `@areyouanand` Vision credit & GitHub links, **v0.7.0 FFmpeg-based audio format conversion**, **v0.7.1 1:1 metadata copying + per-ABI APKs**, **v0.8.0 multi-value tags, MP4/ASF custom fields, WavPack covers, crash-safe writes, BS.1770 ReplayGain, tag-aware browser, editor power tools, file-manager trash/conflict/SHA, conversion patterns, settings backup & LGPL licenses**)
+- versionName 0.8.1 / versionCode 28 (v0.1.0 phase 1, v0.2.1 phase 2, v0.2.2 adaptive UI + hardware scaling, v0.3.0 Home grid + File Manager + Automate, v0.3.1 folder selection + versioned APK/releases, v0.3.2 Theme Screen mode & Design language selector, v0.3.3 roadmap cleanup, v0.4.0 Phase 3 extended audio formats, v0.4.1 audio format conversion added to roadmap, v0.4.2 browser folder summary + in-place tag write fix for DFF/APE, v0.5.0 spectrum analysis, v0.5.1 bit-depth check, v0.5.2 unsaved-edit persistence + undo/redo + per-file edit + kept-values report, v0.5.3–0.6.3 free-form custom fields + ReplayGain matching Tag Editor UX + existing RG detection/skip/remove + Opus R128 + iPod/iTunes Cover Flow Home + in-app File Manager for Spectrum analysis + expanded Settings with Update checker, Release/Beta channel selector, Developer `@areyouanand` Vision credit & GitHub links, **v0.7.0 FFmpeg-based audio format conversion**, **v0.7.1 1:1 metadata copying + per-ABI APKs**, **v0.8.0 multi-value tags, MP4/ASF custom fields, WavPack covers, crash-safe writes, BS.1770 ReplayGain, tag-aware browser, editor power tools, file-manager trash/conflict/SHA, conversion patterns, settings backup & LGPL licenses**, **v0.8.1 explicit state machines: navigation back stack, editor phase/cover states, conversion/file-manager operation states, ReplayGain scan cache + cancellable save, atomic replace, single-run conversion guard**)
 
 ## Locked-in product decisions (do not silently change)
 
@@ -44,7 +44,7 @@ Single user, sideloaded, never going to the Play Store.
    forks must not imply endorsement by, or affiliation with, the original Mp3tag (mp3tag.de)
    or its author.
 
-## Current state (v0.8.0 — local working build, deliberately **not published** per the standing rule below. v0.7.0 remains the published stable release and v0.7.1-beta the last beta. Verified with 29 JVM tests + 18 instrumentation tests on the Pixel_9_API_37 emulator. The DX270 still runs a v0.7.0 APK from an earlier test run; the new tags/ABI features have not been exercised on its hardware yet)
+## Current state (v0.8.1 — local working build, deliberately **not published** per the standing rule below. v0.8.0 is the published stable release. Verified with 34 JVM tests + 18 instrumentation tests on the Pixel_9_API_37 emulator. The DX270 still runs a v0.7.0 APK from an earlier test run; the new tags/ABI features have not been exercised on its hardware yet)
 
 **Recent additions (v0.5.2–0.6.3)**:
 - **Unsaved edit cache persistence** (`EditorDraftStore`): SHA-256-keyed draft in cache dir survives process death / app kill; cleared on discard or when no edits remain after save.
@@ -93,6 +93,17 @@ Single user, sideloaded, never going to the Play Store.
   (`./gradlew connectedDebugAndroidTest`) converts generated WAV/DFF sources to MP3, FLAC, M4A,
   Opus and 24-bit WAV and checks container magic bytes. JVM tests cover option normalisation and
   output naming (`app/src/test/.../data/convert/ConversionOptionsTest.kt`).
+
+## v0.8.1 state-machine fixes
+
+The app had several implicit state machines (independent booleans/optionals). This release makes the risky ones explicit:
+
+- **Navigation** (`MainActivity.kt`): `Screen` no longer embeds `returnTo`. `AppViewModel` keeps a real `ArrayDeque<Screen>` back stack; `openHome()` clears it, every `openX()` pushes the current screen, and `back()` pops. Nested flows (`Home → Spectrum → Settings → Editor`) now unwind correctly, and ReplayGain returns to its origin instead of always Home.
+- **Editor** (`ui/editor/EditorViewModel.kt`): one `EditorPhase` (`LOADING/READY/SAVING/RENAMING/DETECTING_BPM/RESTORING`) replaces the independent `loading`/`saving` booleans; `loading`/`saving` are derived. Cover editing is a sealed `CoverEdit` (`None/Replace/Remove`), so `pendingCover` + `coverRemoveRequested` can no longer both be true. `SaveBackup` now also captures/restores custom fields and removes custom keys added by a bad save.
+- **Conversion** (`ui/convert/ConvertViewModel.kt`): `ConvertPhase` (`IDLE/RUNNING/CANCELLING/FINISHED`) replaces the independent `running`/`cancelRequested` fields; `cancel()` is only accepted in `RUNNING`. `AudioConverter` now holds a `Mutex` so the process-global FFmpeg layer can never run two batches concurrently.
+- **File manager** (`ui/filemanager/FileManagerViewModel.kt`): sealed `FileOperation` (`Idle/Running(message, cancellable)`) replaces `busyMessage` + `busyCancellable`; the UI properties are derived.
+- **ReplayGain** (`ui/replaygain/ReplayGainScreen.kt`): scan results are cached by path set, so rotation no longer restarts a long decode; the save/remove job is tracked and can be cancelled from the progress overlay.
+- **Robustness**: `FfmpegPcmReader` tracks EOF, `SafeWrite` prefers `ATOMIC_MOVE`, Opus temp files use a unique name, the duplicate-scan job is cancellable, and the spectrum cache key includes file size.
 
 ## v0.8.0 feature pass (quality & workflow improvements)
 
@@ -317,7 +328,7 @@ mixed-cover detection. Section sits at the bottom of the editor (user requested)
 
 - **Beta channel**: the `beta` branch is also built by `.github/workflows/build.yml`. Those builds are tagged
   `v<versionName>-beta`, published as **prereleases**, and never marked Latest. `master` stays the stable channel.
-  Current stable: `v0.7.0`; last beta: `v0.7.1-beta`; local working build: `v0.8.0` (**not published**).
+  Current stable: `v0.8.0`; local working build: `v0.8.1` (**not published**).
 
 ## Workflow conventions
 

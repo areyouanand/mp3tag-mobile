@@ -12,6 +12,8 @@ import com.mp3tag.mobile.data.tag.WriteRequest
 import com.mp3tag.mobile.util.PatternParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.jaudiotagger.tag.FieldKey
 import java.io.File
@@ -55,13 +57,17 @@ data class ConversionOutcome(
  */
 object AudioConverter {
 
+    /** Serializes callers: the native FFmpeg layer is process-global and single-run. */
+    private val convertMutex = Mutex()
+
     suspend fun convert(
         paths: List<String>,
         settings: ConvertSettings,
         id3Version: Id3Version,
         onProgress: (ConversionProgress) -> Unit,
         shouldCancel: () -> Boolean = { false },
-    ): ConversionOutcome = withContext(Dispatchers.IO) {
+    ): ConversionOutcome = convertMutex.withLock {
+        withContext(Dispatchers.IO) {
         val options = settings.normalized()
         val results = ArrayList<ConversionFileResult>(paths.size)
         var cancelled = false
@@ -150,6 +156,7 @@ object AudioConverter {
         }
 
         ConversionOutcome(results, cancelled)
+        }
     }
 
     /** Picks a name that never collides with an existing file or the source itself. */

@@ -53,14 +53,34 @@ data class FieldUi(
 data class SaveOutcome(val file: File, val success: Boolean, val message: String?)
 
 /** Tags captured before the most recent save, for "Undo last save". */
-data class SaveBackup(val snapshots: List<TagSnapshot>)
+data class SaveBackup(
+    val snapshots: List<TagSnapshot>,
+    val customFields: Map<String, Map<String, String>> = emptyMap(),
+)
 
 /** Result of one rename operation. */
 data class RenameOutcome(val oldPath: String, val newPath: String?, val error: String?)
 
+/** Single authoritative phase; avoids illegal `loading && saving` combinations. */
+enum class EditorPhase {
+    LOADING,
+    READY,
+    SAVING,
+    RENAMING,
+    DETECTING_BPM,
+    RESTORING,
+}
+
+/** Cover edit is one of three mutually exclusive states. */
+sealed interface CoverEdit {
+    data object None : CoverEdit
+    data class Replace(val image: CoverImage) : CoverEdit
+    data object Remove : CoverEdit
+}
+
 data class EditorState(
     val paths: List<String> = emptyList(),
-    val loading: Boolean = true,
+    val phase: EditorPhase = EditorPhase.LOADING,
     val progressText: String? = null,
     val snapshots: List<TagSnapshot> = emptyList(),
     val fields: Map<FieldKey, FieldUi> = emptyMap(),
@@ -74,15 +94,22 @@ data class EditorState(
     val keptPaths: Set<String> = emptySet(),
     val cover: CoverImage? = null,
     val coverMixed: Boolean = false,
-    val pendingCover: CoverImage? = null,
-    val coverRemoveRequested: Boolean = false,
-    val saving: Boolean = false,
+    val coverEdit: CoverEdit = CoverEdit.None,
     val outcomes: List<SaveOutcome>? = null,
     val renameOutcomes: List<RenameOutcome>? = null,
     val clipboardCount: Int = 0,
     val lastSaveBackup: SaveBackup? = null,
     val statusMessage: String? = null,
 ) {
+    val loading: Boolean get() = phase == EditorPhase.LOADING
+    val saving: Boolean get() = phase == EditorPhase.SAVING ||
+        phase == EditorPhase.RENAMING ||
+        phase == EditorPhase.DETECTING_BPM ||
+        phase == EditorPhase.RESTORING
+
+    val pendingCover: CoverImage? get() = (coverEdit as? CoverEdit.Replace)?.image
+    val coverRemoveRequested: Boolean get() = coverEdit is CoverEdit.Remove
+
     val displayedKeys: List<FieldKey>
         get() = EDITABLE_FIELDS + extraKeys.filter { it !in EDITABLE_FIELDS }
 
@@ -93,7 +120,7 @@ data class EditorState(
         get() = snapshots.filter { it.path !in excludedPaths }
 
     val hasEdits: Boolean
-        get() = perFileOverrides.isNotEmpty() || pendingCover != null || coverRemoveRequested
+        get() = perFileOverrides.isNotEmpty() || coverEdit != CoverEdit.None
 }
 
 class EditorViewModel(
@@ -112,8 +139,7 @@ class EditorViewModel(
         val perFileOverrides: Map<FieldKey, Map<String, String>>,
         val excludedPaths: Set<String>,
         val extraKeys: List<FieldKey>,
-        val pendingCover: CoverImage?,
-        val coverRemoveRequested: Boolean,
+        val coverEdit: CoverEdit,
     )
 
     private val undoStack = ArrayDeque<EditSnapshot>()
@@ -124,8 +150,7 @@ class EditorViewModel(
         perFileOverrides = _state.value.perFileOverrides,
         excludedPaths = _state.value.excludedPaths,
         extraKeys = _state.value.extraKeys,
-        pendingCover = _state.value.pendingCover,
-        coverRemoveRequested = _state.value.coverRemoveRequested,
+        coverEdit = _state.value.coverEdit,
     )
 
     private fun pushUndo() {
@@ -159,8 +184,7 @@ class EditorViewModel(
         _state.update { current ->
             current.buildFrom(current.snapshots, snap.extraKeys, snap.perFileOverrides, snap.excludedPaths)
                 .copy(
-                    pendingCover = snap.pendingCover,
-                    coverRemoveRequested = snap.coverRemoveRequested,
+                    coverEdit = snap.coverEdit,
                     keptPaths = emptySet(),
                 )
         }
@@ -188,7 +212,7 @@ class EditorViewModel(
                     perFileOverrides = draft.perFileOverrides,
                     excludedPaths = draft.excludedPaths,
                     extraKeys = draft.extraKeys,
-                    pendingCover = draft.pendingCover,
+                    coverEdit = draft.pendingCover?.let { CoverEdit.Replace(it) } ?: CoverEdit.None,
                 )
             }
         }
@@ -227,7 +251,7 @@ class EditorViewModel(
             val total = _state.value.paths.size
             _state.update {
                 it.copy(
-                    loading = true,
+                    phase = EditorPhase.LOADING,
                     progressText = if (total > 1) "Reading 0 / $total files…" else null,
                 )
             }
@@ -242,8 +266,7 @@ class EditorViewModel(
                 if (hardReset) {
                     updated = updated.copy(
                         perFileOverrides = emptyMap(),   // keyed by pre-rename paths — stale
-                        pendingCover = null,
-                        coverRemoveRequested = false,
+                        coverEdit = CoverEdit.None,
                         outcomes = null,
                         excludedPaths = emptySet(),
                         keptPaths = emptySet(),
@@ -257,7 +280,7 @@ class EditorViewModel(
 
     fun cancelReload() {
         reloadJob?.cancel()
-        _state.update { it.copy(loading = false, progressText = null) }
+        _state.update { it.copy(phase = EditorPhase.READY, progressText = null) }
     }
 
     // ------------------------------------------------------------------
@@ -300,14 +323,14 @@ class EditorViewModel(
         val targets = current.includedSnapshots
         if (targets.isEmpty()) return
         viewModelScope.launch {
-            _state.update { it.copy(saving = true, progressText = "Renaming ${targets.size} file(s)…") }
+            _state.update { it.copy(phase = EditorPhase.RENAMING, progressText = "Renaming ${targets.size} file(s)…") }
             val outcomes = withContext(Dispatchers.IO) {
                 performRenames(targets, pattern)
             }
             _state.update {
                 val renamedOldPaths = outcomes.map { it.oldPath }.toSet()
                 it.copy(
-                    saving = false,
+                    phase = EditorPhase.READY,
                     progressText = null,
                     renameOutcomes = outcomes,
                     paths = outcomes.map { o -> o.newPath ?: o.oldPath } +
@@ -402,7 +425,7 @@ class EditorViewModel(
     fun discardChanges() {        pushUndo()
         _state.update { current ->
             current.buildFrom(current.snapshots, current.extraKeys, perFileOverrides = emptyMap())
-                .copy(pendingCover = null, coverRemoveRequested = false, keptPaths = emptySet())
+                .copy(coverEdit = CoverEdit.None, keptPaths = emptySet())
         }
         draftStore.clear(paths)
     }
@@ -427,19 +450,19 @@ class EditorViewModel(
             }
             if (cover != null) {
                 pushUndo()
-                _state.update { it.copy(pendingCover = cover, coverRemoveRequested = false) }
+                _state.update { it.copy(coverEdit = CoverEdit.Replace(cover)) }
             }
         }
     }
 
     fun onCoverRemove() {
         pushUndo()
-        _state.update { it.copy(coverRemoveRequested = true, pendingCover = null) }
+        _state.update { it.copy(coverEdit = CoverEdit.Remove) }
     }
 
     fun onCoverUndo() {
         pushUndo()
-        _state.update { it.copy(pendingCover = null, coverRemoveRequested = false) }
+        _state.update { it.copy(coverEdit = CoverEdit.None) }
     }
 
     // ------------------------------------------------------------------
@@ -575,8 +598,7 @@ class EditorViewModel(
                 pushUndo()
                 _state.update {
                     it.copy(
-                        pendingCover = cover,
-                        coverRemoveRequested = false,
+                        coverEdit = CoverEdit.Replace(cover),
                         statusMessage = "Cover loaded from $name",
                     )
                 }
@@ -599,7 +621,7 @@ class EditorViewModel(
         val targets = current.includedSnapshots
         if (targets.isEmpty()) return
         viewModelScope.launch {
-            _state.update { it.copy(saving = true, progressText = "Detecting BPM 0 / ${targets.size}…") }
+            _state.update { it.copy(phase = EditorPhase.DETECTING_BPM, progressText = "Detecting BPM 0 / ${targets.size}…") }
             val results = withContext(Dispatchers.IO) {
                 targets.mapIndexedNotNull { index, snap ->
                     val bpm = BpmDetector.detect(File(snap.path))
@@ -622,7 +644,7 @@ class EditorViewModel(
                     state.extraKeys + FieldKey.BPM
                 }
                 state.buildFrom(state.snapshots, extra, overrides).copy(
-                    saving = false,
+                    phase = EditorPhase.READY,
                     progressText = null,
                     statusMessage = "BPM detected for ${results.size} of ${targets.size} file(s)",
                 )
@@ -725,12 +747,19 @@ class EditorViewModel(
         val backup = _state.value.lastSaveBackup ?: return
         if (_state.value.saving) return
         viewModelScope.launch {
-            _state.update { it.copy(saving = true, progressText = "Restoring previous tags…") }
+            _state.update { it.copy(phase = EditorPhase.RESTORING, progressText = "Restoring previous tags…") }
             withContext(Dispatchers.IO) {
                 backup.snapshots.forEach { snap ->
                     val file = File(snap.path)
                     if (!file.isFile) return@forEach
                     runCatching {
+                        val oldCustom = backup.customFields[snap.path].orEmpty()
+                        val currentCustom = runCatching {
+                            TagEngine.readAllCustomFields(file)
+                        }.getOrDefault(emptyMap())
+                        val removals = currentCustom.keys
+                            .filter { it !in oldCustom }
+                            .associateWith { "" }
                         val cleared = FieldKey.entries
                             .filter { it != FieldKey.COVER_ART }
                             .associateWith { null as String? }
@@ -739,6 +768,7 @@ class EditorViewModel(
                             request = WriteRequest(
                                 fieldValues = cleared + snap.fields,
                                 multiFields = snap.multiFields,
+                                customFields = oldCustom + removals,
                                 coverAction = if (snap.cover != null) CoverAction.REPLACE else CoverAction.REMOVE,
                                 newCover = snap.cover,
                             ),
@@ -749,7 +779,7 @@ class EditorViewModel(
             }
             _state.update {
                 it.copy(
-                    saving = false,
+                    phase = EditorPhase.READY,
                     progressText = null,
                     lastSaveBackup = null,
                     statusMessage = "Restored tags from before the last save",
@@ -796,12 +826,20 @@ class EditorViewModel(
         viewModelScope.launch {
             val targets = current.snapshots.filter { it.path !in current.excludedPaths }
             val total = targets.size
+            val backupCustom = withContext(Dispatchers.IO) {
+                targets.associate { target ->
+                    target.path to runCatching {
+                        TagEngine.readAllCustomFields(File(target.path))
+                    }.getOrDefault(emptyMap())
+                }
+            }
             val backup = SaveBackup(
                 targets.mapNotNull { target -> current.snapshots.firstOrNull { it.path == target.path } },
+                customFields = backupCustom,
             )
             _state.update {
                 it.copy(
-                    saving = true,
+                    phase = EditorPhase.SAVING,
                     outcomes = null,
                     progressText = if (total > 1) "Saving 0 / $total files…" else "Saving…",
                 )
@@ -848,11 +886,10 @@ class EditorViewModel(
             val snapshots = readAll(current.snapshots.map { it.path })
             _state.update {
                 it.buildFrom(snapshots, it.extraKeys, keptOverrides).copy(
-                    saving = false,
+                    phase = EditorPhase.READY,
                     progressText = null,
                     outcomes = outcomes,
-                    pendingCover = null,
-                    coverRemoveRequested = false,
+                    coverEdit = CoverEdit.None,
                     keptPaths = keptPaths,
                     lastSaveBackup = if (outcomes.any { o -> o.success }) backup else it.lastSaveBackup,
                 )
@@ -967,7 +1004,7 @@ class EditorViewModel(
 
         if (canReuseSnapshotDerived) {
             return copy(
-                loading = false,
+                phase = if (this.phase == EditorPhase.LOADING) EditorPhase.READY else this.phase,
                 fields = fields,
                 perFileOverrides = perFileOverrides,
             )
@@ -983,7 +1020,7 @@ class EditorViewModel(
             }
         val covers = included.mapNotNull { it.cover }.distinct()
         return copy(
-            loading = false,
+            phase = if (this.phase == EditorPhase.LOADING) EditorPhase.READY else this.phase,
             snapshots = snapshots,
             excludedPaths = excludedPaths,
             fields = fields,

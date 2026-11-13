@@ -105,6 +105,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     private val prefs = AppPrefs(application)
     private var loadJob: Job? = null
     private var tagJob: Job? = null
+    private var duplicateJob: Job? = null
 
     private val _state = MutableStateFlow(
         BrowserState(
@@ -127,6 +128,8 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
 
     fun open(directory: File, remember: Boolean = true) {
         loadJob?.cancel()
+        tagJob?.cancel()
+        duplicateJob?.cancel()
         _state.update {
             it.copy(
                 loading = true,
@@ -256,7 +259,8 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             _state.update { it.copy(statusMessage = "This folder has no audio files") }
             return
         }
-        viewModelScope.launch {
+        duplicateJob?.cancel()
+        duplicateJob = viewModelScope.launch {
             _state.update { it.copy(statusMessage = "Looking for duplicates…") }
             val info = current.tagInfo.ifEmpty {
                 val map = HashMap<String, BrowserTagInfo>()

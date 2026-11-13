@@ -136,6 +136,36 @@ private data class ExistingRgTags(
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+private data class ReplayGainScanCache(
+    val tracks: List<TrackLoudness>,
+    val skippedPaths: List<String>,
+    val failedPaths: List<String>,
+)
+
+/**
+ * Survives Compose recomposition/rotation (but not process death). The screen's
+ * scan state used to be entirely composable-local, so rotating restarted the scan.
+ */
+private object ReplayGainScanCacheStore {
+    private var key: String? = null
+    private var value: ReplayGainScanCache? = null
+
+    fun load(paths: List<String>): ReplayGainScanCache? =
+        value.takeIf { key == cacheKey(paths) }
+
+    fun save(paths: List<String>, cache: ReplayGainScanCache) {
+        key = cacheKey(paths)
+        value = cache
+    }
+
+    fun clear() {
+        key = null
+        value = null
+    }
+
+    private fun cacheKey(paths: List<String>): String = paths.sorted().joinToString("\u0001")
+}
+
 @Composable
 fun ReplayGainScreen(
     onBack: () -> Unit,
@@ -178,10 +208,12 @@ private fun ReplayGainEditorView(
     val scope = rememberCoroutineScope()
     val windowInfo = rememberAdaptiveWindowInfo()
 
+    val cachedScan = remember(paths) { ReplayGainScanCacheStore.load(paths) }
+
     var existingByPath by remember(paths) { mutableStateOf<Map<String, ExistingRgTags>>(emptyMap()) }
-    var tracks by remember(paths) { mutableStateOf<List<TrackLoudness>>(emptyList()) }
-    var skippedPaths by remember(paths) { mutableStateOf<List<String>>(emptyList()) }
-    var failedPaths by remember(paths) { mutableStateOf<List<String>>(emptyList()) }
+    var tracks by remember(paths) { mutableStateOf(cachedScan?.tracks ?: emptyList()) }
+    var skippedPaths by remember(paths) { mutableStateOf(cachedScan?.skippedPaths ?: emptyList()) }
+    var failedPaths by remember(paths) { mutableStateOf(cachedScan?.failedPaths ?: emptyList()) }
     var excludedPaths by remember(paths) { mutableStateOf<Set<String>>(emptySet()) }
     var albumGain by remember(paths) { mutableStateOf<Double?>(null) }
     var albumLufs by remember(paths) { mutableStateOf<Double?>(null) }
@@ -192,6 +224,7 @@ private fun ReplayGainEditorView(
     var progressTotal by remember(paths) { mutableIntStateOf(paths.size) }
     var currentFileName by remember(paths) { mutableStateOf<String?>(null) }
     var scanJob by remember { mutableStateOf<Job?>(null) }
+    var saveJob by remember { mutableStateOf<Job?>(null) }
 
     val hasOpusFiles = remember(paths, excludedPaths) {
         paths.any { it !in excludedPaths && TagEngine.formatFor(File(it)) == AudioFormat.OPUS }
@@ -251,6 +284,7 @@ private fun ReplayGainEditorView(
         tracks = emptyList()
         skippedPaths = emptyList()
         failedPaths = emptyList()
+        ReplayGainScanCacheStore.save(paths, ReplayGainScanCache(emptyList(), emptyList(), emptyList()))
         progressCurrent = 0
         progressTotal = paths.size
         currentFileName = paths.firstOrNull()?.let { File(it).name }
@@ -293,6 +327,10 @@ private fun ReplayGainEditorView(
                         skippedPaths = snapshotSkipped
                         failedPaths = snapshotFailed
                         recomputeAlbumMetrics(snapshotTracks, excludedPaths)
+                        ReplayGainScanCacheStore.save(
+                            paths,
+                            ReplayGainScanCache(snapshotTracks, snapshotSkipped, snapshotFailed),
+                        )
                     }
                 }
             }
@@ -302,11 +340,18 @@ private fun ReplayGainEditorView(
     }
 
     LaunchedEffect(paths) {
-        startScan(skipExistingRg)
+        if (cachedScan == null) {
+            startScan(skipExistingRg)
+        } else {
+            // Rotation reuses the cached scan instead of re-decoding every file.
+            existingByPath = loadExistingTagsMap()
+            recomputeAlbumMetrics(tracks, excludedPaths)
+        }
     }
 
     val requestExit: () -> Unit = {
         scanJob?.cancel()
+        saveJob?.cancel()
         onBackToBrowser()
     }
     BackHandler { requestExit() }
@@ -326,7 +371,7 @@ private fun ReplayGainEditorView(
         if (canSave) {
             saving = true
             saveProgressText = "Saving ReplayGain tags…"
-            scope.launch {
+            saveJob = scope.launch {
                 val results = withContext(Dispatchers.IO) {
                     val options = WriteOptions(id3Version = prefs.id3Version)
                     val targetAlbumGain = albumGain
@@ -368,6 +413,7 @@ private fun ReplayGainEditorView(
                 saving = false
                 saveProgressText = null
                 outcomes = results
+                saveJob = null
             }
         }
     }
@@ -376,7 +422,7 @@ private fun ReplayGainEditorView(
         if (!analyzing && !saving && activePathsForRemove.isNotEmpty()) {
             saving = true
             saveProgressText = "Removing ReplayGain tags…"
-            scope.launch {
+            saveJob = scope.launch {
                 val results = withContext(Dispatchers.IO) {
                     val options = WriteOptions(id3Version = prefs.id3Version)
                     val clearMap = REPLAYGAIN_KEYS.associateWith { "" }
@@ -401,6 +447,7 @@ private fun ReplayGainEditorView(
                 saving = false
                 saveProgressText = null
                 outcomes = results
+                saveJob = null
             }
         }
     }
@@ -728,6 +775,15 @@ private fun ReplayGainEditorView(
                                     style = MaterialTheme.typography.bodyMedium,
                                 )
                             }
+                            Spacer(Modifier.height(6.dp))
+                            TextButton(
+                                onClick = {
+                                    saveJob?.cancel()
+                                    saveJob = null
+                                    saving = false
+                                    saveProgressText = null
+                                },
+                            ) { Text("Cancel") }
                         }
                     }
                 }
